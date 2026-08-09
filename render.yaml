@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: dream-mate-api
+    runtime: python
+    buildCommand: pip install -r apps/api/requirements.txt
+    startCommand: uvicorn apps.api.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9

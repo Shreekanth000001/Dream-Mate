@@ -2,7 +2,11 @@ import uuid
 from datetime import datetime
 from sqlalchemy import Column, String, DateTime, ForeignKey, Integer, JSON
 from sqlalchemy.orm import relationship
+from pgvector.sqlalchemy import Vector
 from apps.api.database import Base
+from apps.api.config import settings
+
+embedding_type = Vector(768) if "postgresql" in settings.DATABASE_URL else JSON
 
 def generate_uuid():
     return str(uuid.uuid4())
@@ -60,7 +64,7 @@ class Memory(Base):
     memory_type = Column(String) # 'working', 'episodic', 'semantic'
     importance = Column(Integer, default=1)
     expiration_at = Column(DateTime, nullable=True)
-    embedding = Column(JSON) # Storing as JSON array for SQLite since pgvector isn't available
+    embedding = Column(embedding_type) # Storing as Vector in Postgres, JSON in SQLite
     
     user = relationship("User", back_populates="memories")
 

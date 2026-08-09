@@ -39,11 +39,13 @@ def consolidate_memories_task(user_id: str, conversation_id: str):
             ).first()
             
             if not existing:
+                embedding = ai_provider.get_embedding(fact)
                 memory = models.Memory(
                     user_id=user_id,
                     content=fact,
                     memory_type="recent",
-                    importance=5
+                    importance=5,
+                    embedding=embedding
                 )
                 db.add(memory)
                 

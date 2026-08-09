@@ -7,3 +7,7 @@ class MockProvider(AIProvider):
 
     def extract_memories(self, text: str) -> List[str]:
         return ["Mock memory extracted for testing"]
+
+    def get_embedding(self, text: str) -> List[float]:
+        # Return a mock 768-dimensional vector
+        return [0.0] * 768

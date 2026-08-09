@@ -17,3 +17,8 @@ class AIProvider(ABC):
     def extract_memories(self, text: str) -> List[str]:
         """Extracts key facts/memories from a text string."""
         pass
+
+    @abstractmethod
+    def get_embedding(self, text: str) -> List[float]:
+        """Generates an embedding for the given text."""
+        pass

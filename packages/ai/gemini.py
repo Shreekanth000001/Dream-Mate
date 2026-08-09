@@ -59,3 +59,14 @@ class GeminiProvider(AIProvider):
             return lines
         except Exception:
             return []
+
+    def get_embedding(self, text: str) -> List[float]:
+        try:
+            result = genai.embed_content(
+                model="models/text-embedding-004",
+                content=text
+            )
+            return result['embedding']
+        except Exception as e:
+            print(f"Gemini embedding error: {e}")
+            return [0.0] * 768

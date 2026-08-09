@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from pydantic import BaseModel
 from typing import List
 from apps.api import models, schemas, auth
 from apps.api.database import get_db
 from packages.ai.gemini import GeminiProvider
 from packages.ai.mock import MockProvider
+from packages.ai.voice import ElevenLabsProvider, MockVoiceProvider
 from apps.api.config import settings
 from apps.api.routers.memories import consolidate_memories_task
 
@@ -13,8 +15,10 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 
 if settings.AI_PROVIDER == "mock":
     ai_provider = MockProvider()
+    voice_provider = MockVoiceProvider()
 else:
     ai_provider = GeminiProvider()
+    voice_provider = ElevenLabsProvider()
 
 class ChatRequest(BaseModel):
     message: str
@@ -28,7 +32,7 @@ class ChatResponse(BaseModel):
     avatar_emotion: AvatarEmotion
     take_break_suggested: bool = False
 
-def generate_system_prompt(companion: models.Companion, dreams: List[models.Dream], tasks: List[models.Task]) -> str:
+def generate_system_prompt(companion: models.Companion, dreams: List[models.Dream], tasks: List[models.Task], semantic_memories: List[str] = None) -> str:
     prompt = f"You are {companion.name}, a supportive AI companion. Your personality style is {companion.personality_style} and accountability style is {companion.accountability_style}.\n"
     prompt += "Your core philosophy is to help the user achieve their real-world dreams, NOT to keep them chatting endlessly. You care about them.\n"
     
@@ -38,6 +42,9 @@ def generate_system_prompt(companion: models.Companion, dreams: List[models.Drea
     pending_tasks = [t for t in tasks if t.status == 'pending']
     if pending_tasks:
         prompt += f"The user has {len(pending_tasks)} pending tasks, such as: {pending_tasks[0].title}.\n"
+        
+    if semantic_memories:
+        prompt += f"Relevant past memories:\n" + "\n".join([f"- {m}" for m in semantic_memories]) + "\n"
         
     prompt += "If the user has been chatting for a while, gently encourage them to take a break and work on their dreams or go outside."
     return prompt
@@ -78,7 +85,19 @@ def send_message(
     dreams = db.query(models.Dream).filter(models.Dream.user_id == current_user.id).all()
     tasks = db.query(models.Task).join(models.Goal).join(models.Dream).filter(models.Dream.user_id == current_user.id).all()
     
-    system_prompt = generate_system_prompt(companion, dreams, tasks)
+    # Semantic memory retrieval
+    semantic_memories = []
+    if "postgresql" in settings.DATABASE_URL:
+        # Generate embedding for user message
+        user_embedding = ai_provider.get_embedding(req.message)
+        # Fetch top 5 closest memories
+        closest_memories = db.query(models.Memory).filter(
+            models.Memory.user_id == current_user.id,
+            models.Memory.embedding.is_not(None)
+        ).order_by(models.Memory.embedding.l2_distance(user_embedding)).limit(5).all()
+        semantic_memories = [m.content for m in closest_memories]
+    
+    system_prompt = generate_system_prompt(companion, dreams, tasks, semantic_memories)
     
     # Generate AI response (which is now JSON)
     reply_json_str = ai_provider.generate_chat_response(system_prompt, messages_formatted)
@@ -113,3 +132,11 @@ def send_message(
         "avatar_emotion": avatar_emotion,
         "take_break_suggested": take_break_suggested
     }
+
+class VoiceRequest(BaseModel):
+    text: str
+
+@router.post("/voice")
+def synthesize_voice(req: VoiceRequest, current_user: models.User = Depends(auth.get_current_user)):
+    audio_base64 = voice_provider.synthesize(req.text)
+    return {"audio_base64": audio_base64}

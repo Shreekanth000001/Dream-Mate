@@ -50,8 +50,8 @@ const CompanionStage = React.memo(function CompanionStage({
   const character = CHARACTER_REGISTRY.find(c => c.id === baseAvatar) || CHARACTER_REGISTRY[0];
   const fallbackTransform = character?.defaultTransform || { position: [0, -1.4, 0], rotation: [0, 0, 0], scale: 1.0, cameraPosition: [0, 1.4, 1.2], cameraTarget: [0, 1.4, 0] };
   
-  const savedTransform = appearanceObj.transform as any;
-  const savedCamera = appearanceObj.camera as any;
+  const savedTransform = appearanceObj.transform as { position: [number, number, number]; rotation: [number, number, number]; scale: number } | undefined;
+  const savedCamera = appearanceObj.camera as { position: [number, number, number]; target: [number, number, number] } | undefined;
   
   const cameraPos = savedCamera?.position || fallbackTransform.cameraPosition;
   const cameraTgt = savedCamera?.target || fallbackTransform.cameraTarget;

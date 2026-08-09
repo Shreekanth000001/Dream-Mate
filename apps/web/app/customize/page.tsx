@@ -117,9 +117,9 @@ export default function CustomizePage() {
       if (key === 'scale') {
         current.scale = value;
       } else {
-        const arr = [...(current as any)[key]] as [number, number, number];
+        const arr = [...((current as Record<string, unknown>)[key] as [number, number, number])];
         if (index !== null) arr[index] = value;
-        (current as any)[key] = arr;
+        (current as Record<string, unknown>)[key] = arr;
       }
       next[baseAvatar] = current;
       return next;
@@ -165,15 +165,18 @@ export default function CustomizePage() {
               if (app.voiceURI) setVoiceURI(app.voiceURI as string);
               
               if (app.transform || app.camera) {
+                const transformObj = app.transform as { position?: [number, number, number]; rotation?: [number, number, number]; scale?: number } | undefined;
+                const cameraObj = app.camera as { position?: [number, number, number]; target?: [number, number, number] } | undefined;
+                const avatarKey = (app.baseAvatar as string) || 'boy';
                 setAvatarTransforms(prev => ({
                   ...prev,
-                  [app.baseAvatar as string || 'boy']: {
-                    ...(prev[app.baseAvatar as string || 'boy']),
-                    position: (app.transform as any)?.position || prev[app.baseAvatar as string || 'boy'].position,
-                    rotation: (app.transform as any)?.rotation || prev[app.baseAvatar as string || 'boy'].rotation,
-                    scale: (app.transform as any)?.scale || prev[app.baseAvatar as string || 'boy'].scale,
-                    cameraPosition: (app.camera as any)?.position || prev[app.baseAvatar as string || 'boy'].cameraPosition,
-                    cameraTarget: (app.camera as any)?.target || prev[app.baseAvatar as string || 'boy'].cameraTarget,
+                  [avatarKey]: {
+                    ...(prev[avatarKey] || defaultTransforms['boy']),
+                    position: transformObj?.position || prev[avatarKey]?.position || defaultTransforms['boy'].position,
+                    rotation: transformObj?.rotation || prev[avatarKey]?.rotation || defaultTransforms['boy'].rotation,
+                    scale: transformObj?.scale || prev[avatarKey]?.scale || defaultTransforms['boy'].scale,
+                    cameraPosition: cameraObj?.position || prev[avatarKey]?.cameraPosition || defaultTransforms['boy'].cameraPosition,
+                    cameraTarget: cameraObj?.target || prev[avatarKey]?.cameraTarget || defaultTransforms['boy'].cameraTarget,
                   }
                 }));
               }

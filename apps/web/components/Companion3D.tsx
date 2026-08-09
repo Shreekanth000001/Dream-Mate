@@ -2,10 +2,10 @@
 
 import { useRef, useState, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Group, Quaternion, Euler, AnimationMixer } from 'three';
+import { Group, Quaternion, Euler, AnimationMixer, Object3D, Mesh, Material } from 'three';
 import { Html } from '@react-three/drei';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { VRMLoaderPlugin, VRM, VRMExpressionPresetName } from '@pixiv/three-vrm';
+import { VRMLoaderPlugin, VRM, VRMExpressionPresetName, VRMHumanBoneName } from '@pixiv/three-vrm';
 import { CHARACTER_REGISTRY } from '@/lib/characters';
 
 export interface AvatarAppearance {
@@ -68,7 +68,7 @@ function AvatarRenderer({
   onCapabilitiesLoaded
 }: Companion3DProps & { vrm: VRM, mixer: AnimationMixer | null }) {
   const groupRef = useRef<Group>(null);
-  const bonesRef = useRef<Record<string, any>>({});
+  const bonesRef = useRef<Record<string, Object3D>>({});
   const restPoseRef = useRef<Record<string, Quaternion>>({});
   const poseAppliedRef = useRef(false);
 
@@ -99,11 +99,11 @@ function AvatarRenderer({
     }
     
     if (vrm.humanoid) {
-      const bones: Record<string, any> = {};
+      const bones: Record<string, Object3D> = {};
       const restPose: Record<string, Quaternion> = {};
       
       for (const boneName of VRM_BONES) {
-        const node = vrm.humanoid.getNormalizedBoneNode(boneName as any);
+        const node = vrm.humanoid.getNormalizedBoneNode(boneName as VRMHumanBoneName);
         if (node) {
           bones[boneName] = node;
           // Store the original rest quaternion BEFORE we modify anything
@@ -122,7 +122,7 @@ function AvatarRenderer({
   }, [vrm, onCapabilitiesLoaded]);
 
   // Helper: apply relaxed pose using rest quaternion + offset
-  function applyRelaxedPose(bones: Record<string, any>, restPose: Record<string, Quaternion>) {
+  function applyRelaxedPose(bones: Record<string, Object3D>, restPose: Record<string, Quaternion>) {
     for (const boneName of VRM_BONES) {
       const node = bones[boneName];
       const rest = restPose[boneName];
@@ -249,15 +249,19 @@ export function Companion3D(props: Companion3DProps) {
   // No silent fallback: if character not found, we will show an error
   const url = character ? character.model : '';
   
+  const vrmRef = useRef<VRM | null>(null);
+
   useEffect(() => {
     if (!url) {
-      setErrorUrl(`Unknown character: ${baseAvatar}`);
-      setModelStatus('error');
+      queueMicrotask(() => {
+        setErrorUrl(`Unknown character: ${baseAvatar}`);
+        setModelStatus('error');
+      });
       return;
     }
     
     // Skip if same URL already loaded
-    if (url === prevUrlRef.current && vrm) return;
+    if (url === prevUrlRef.current && vrmRef.current) return;
     prevUrlRef.current = url;
     
     setModelStatus('loading');
@@ -290,14 +294,15 @@ export function Companion3D(props: Companion3DProps) {
           });
           
           // Cleanup previous VRM
-          if (vrm) {
-            vrm.scene.traverse((obj: any) => {
-              if (obj.geometry) obj.geometry.dispose();
-              if (obj.material) {
-                if (Array.isArray(obj.material)) {
-                  obj.material.forEach((m: any) => m.dispose());
+          if (vrmRef.current) {
+            vrmRef.current.scene.traverse((obj: Object3D) => {
+              const mesh = obj as Mesh;
+              if (mesh.geometry) mesh.geometry.dispose();
+              if (mesh.material) {
+                if (Array.isArray(mesh.material)) {
+                  mesh.material.forEach((m: Material) => m.dispose());
                 } else {
-                  obj.material.dispose();
+                  mesh.material.dispose();
                 }
               }
             });
@@ -315,6 +320,7 @@ export function Companion3D(props: Companion3DProps) {
             console.log(`[VRM Loader] VRM has no idle animation (No animations found in GLTF).`);
           }
           
+          vrmRef.current = loadedVrm;
           setVrm(loadedVrm);
           setMixer(newMixer);
           setModelStatus('ready');
@@ -332,7 +338,7 @@ export function Companion3D(props: Companion3DProps) {
           setModelStatus('error');
        }
     );
-  }, [url]);
+  }, [url, baseAvatar]);
 
   if (modelStatus === 'loading') {
     return (

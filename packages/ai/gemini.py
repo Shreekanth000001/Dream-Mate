@@ -24,12 +24,6 @@ class GeminiProvider(AIProvider):
         tools: List[Dict[str, Any]] = None,
         model_type: str = "chat"
     ) -> str:
-        # Convert our standard message format to Gemini's format
-        history = []
-        for msg in messages:
-            role = "user" if msg["role"] == "user" else "model"
-            history.append({"role": role, "parts": [msg["content"]]})
-            
         system_prompt += "\n\nCRITICAL INSTRUCTION: You must respond in valid JSON format. The JSON schema should be:\n"
         system_prompt += "{\n"
         system_prompt += "  \"message\": \"your text reply\",\n"
@@ -37,25 +31,35 @@ class GeminiProvider(AIProvider):
         system_prompt += "  \"shouldSpeak\": true  // set to true unless it's a very trivial acknowledgement\n"
         system_prompt += "}"
         
+        history = [
+            {"role": "user", "parts": [f"SYSTEM INSTRUCTION:\n{system_prompt}"]},
+            {"role": "model", "parts": ['{"message": "Understood. I will act as your supportive companion.", "avatar_emotion": {"emotion": "neutral", "intensity": 0.5}, "shouldSpeak": false}']}
+        ]
+        for msg in messages:
+            role = "user" if msg["role"] == "user" else "model"
+            history.append({"role": role, "parts": [msg["content"]]})
+            
         model_name = self.reasoning_model_name if model_type == "reasoning" else self.chat_model_name
         
-        # In a real app we would use system_instruction in GenerativeModel
-        model = genai.GenerativeModel(
-            model_name,
-            system_instruction=system_prompt,
-            generation_config=genai.types.GenerationConfig(
-                response_mime_type="application/json",
-            )
-        )
-        
         try:
-            chat = model.start_chat(history=history[:-1] if history else [])
-            last_message = history[-1]["parts"][0] if history else "Hello"
+            try:
+                model = genai.GenerativeModel(
+                    model_name,
+                    system_instruction=system_prompt,
+                    generation_config={"response_mime_type": "application/json"}
+                )
+                chat_history = history[2:] if len(history) > 2 else []
+            except TypeError:
+                model = genai.GenerativeModel(model_name)
+                chat_history = history
+                
+            chat = model.start_chat(history=chat_history[:-1] if chat_history else [])
+            last_message = chat_history[-1]["parts"][0] if chat_history else "Hello"
             response = chat.send_message(last_message)
             return response.text
         except Exception as e:
             print(f"Gemini error: {e}")
-            return '{"message": "I\'m having trouble processing that right now. Could we talk about your goals instead?", "avatar_emotion": {"emotion": "concerned", "intensity": 0.5}}'
+            return '{"message": "I\'m having trouble processing that right now. Could we talk about your goals instead?", "avatar_emotion": {"emotion": "concerned", "intensity": 0.5}, "shouldSpeak": true}'
 
     def extract_memories(self, text: str) -> List[str]:
         prompt = f"""

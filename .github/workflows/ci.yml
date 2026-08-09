@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  frontend:
+    name: Frontend (Next.js)
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: apps/web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run TypeScript Type Check
+        run: npm run typecheck
+
+      - name: Build Next.js
+        run: npm run build
+
+  backend:
+    name: Backend (FastAPI)
+    runs-on: ubuntu-latest
+
+    env:
+      # Mock API key for CI
+      GEMINI_API_KEY: "test_key_mock"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: apps/api/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r apps/api/requirements.txt
+          pip install pytest httpx
+
+      - name: Validate imports (Startup Check)
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -c "from apps.api.main import app; print('Backend imported successfully')"
+
+      - name: Run Tests (if any)
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          if [ -d "apps/api/tests" ] || ls apps/api/test_*.py 1> /dev/null 2>&1; then
+            pytest apps/api
+          else
+            echo "No tests found, skipping pytest."
+          fi

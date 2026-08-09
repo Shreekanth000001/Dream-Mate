@@ -30,6 +30,7 @@ class AvatarEmotion(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     avatar_emotion: AvatarEmotion
+    shouldSpeak: bool = True
     take_break_suggested: bool = False
 
 def generate_system_prompt(companion: models.Companion, dreams: List[models.Dream], tasks: List[models.Task], semantic_memories: List[str] = None) -> str:
@@ -46,7 +47,11 @@ def generate_system_prompt(companion: models.Companion, dreams: List[models.Drea
     if semantic_memories:
         prompt += f"Relevant past memories:\n" + "\n".join([f"- {m}" for m in semantic_memories]) + "\n"
         
-    prompt += "If the user has been chatting for a while, gently encourage them to take a break and work on their dreams or go outside."
+    prompt += "ACCOUNTABILITY ROLE:\n"
+    prompt += "1. Remind the user about unfinished tasks and encourage them to start if they are procrastinating.\n"
+    prompt += "2. Celebrate completed tasks enthusiastically.\n"
+    prompt += "3. Suggest one concrete next action if they are stuck.\n"
+    prompt += "4. If they have been chatting for a while, firmly but warmly encourage them to take a break and go work on their dreams in the real world. We want them to act, not just chat.\n"
     return prompt
 
 @router.post("/", response_model=ChatResponse)
@@ -107,9 +112,11 @@ def send_message(
         reply_data = json.loads(reply_json_str)
         reply_text = reply_data.get("message", "I didn't understand that.")
         avatar_emotion = reply_data.get("avatar_emotion", {"emotion": "neutral", "intensity": 0.5})
+        should_speak = reply_data.get("shouldSpeak", True)
     except json.JSONDecodeError:
         reply_text = reply_json_str
         avatar_emotion = {"emotion": "neutral", "intensity": 0.5}
+        should_speak = True
     
     # Save AI message
     ai_msg = models.Message(conversation_id=conversation.id, role="assistant", content=reply_text)
@@ -130,6 +137,7 @@ def send_message(
     return {
         "reply": reply_text, 
         "avatar_emotion": avatar_emotion,
+        "shouldSpeak": should_speak,
         "take_break_suggested": take_break_suggested
     }
 

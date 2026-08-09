@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 
 export default function Dashboard() {
   const router = useRouter();
-  const [user, setUser] = useState<unknown>(null);
   const [dreams, setDreams] = useState<unknown[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -20,8 +19,7 @@ export default function Dashboard() {
 
     const loadData = async () => {
       try {
-        const u = await api.getMe();
-        setUser(u);
+        await api.getMe();
         const d = await api.getDreams();
         setDreams(d);
       } catch (e) {

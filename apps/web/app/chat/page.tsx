@@ -18,6 +18,9 @@ export default function ChatPage() {
   const [showBreakModal, setShowBreakModal] = useState(false);
   const [currentEmotion, setCurrentEmotion] = useState('neutral');
   const [currentIntensity, setCurrentIntensity] = useState(0.5);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -47,6 +50,39 @@ export default function ChatPage() {
         setCurrentEmotion('neutral');
       }
       
+      // Voice synthesis
+      if (res.shouldSpeak && voiceEnabled) {
+        try {
+          const voiceRes = await fetch('/api/chat/voice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+            body: JSON.stringify({ text: res.reply })
+          });
+          const voiceData = await voiceRes.json();
+          if (voiceData.audio_base64) {
+            const audio = new Audio(`data:audio/mp3;base64,${voiceData.audio_base64}`);
+            audio.onplay = () => setIsSpeaking(true);
+            audio.onended = () => setIsSpeaking(false);
+            audio.play().catch(e => {
+              console.error("Audio play blocked", e);
+              // Fallback to time-based speaking animation
+              setIsSpeaking(true);
+              setTimeout(() => setIsSpeaking(false), res.reply.length * 50);
+            });
+          } else {
+             setIsSpeaking(true);
+             setTimeout(() => setIsSpeaking(false), res.reply.length * 50);
+          }
+        } catch (e) {
+          console.error("Voice synthesis failed", e);
+          setIsSpeaking(true);
+          setTimeout(() => setIsSpeaking(false), res.reply.length * 50);
+        }
+      } else {
+        setIsSpeaking(true);
+        setTimeout(() => setIsSpeaking(false), res.reply.length * 50);
+      }
+      
       if (res.take_break_suggested) {
         setShowBreakModal(true);
       }
@@ -59,13 +95,42 @@ export default function ChatPage() {
     }
   };
 
+  const toggleListen = () => {
+    if (isListening) return; // Prevent multiple instances
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Your browser does not support voice input.");
+      return;
+    }
+    
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    
+    recognition.onstart = () => setIsListening(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setInput(transcript);
+      // Optional: automatically send when stopped
+    };
+    recognition.onerror = () => setIsListening(false);
+    recognition.onend = () => setIsListening(false);
+    
+    recognition.start();
+  };
+
   return (
     <div className="flex h-screen bg-zinc-950 text-zinc-100 flex-col md:flex-row">
       {/* Sidebar for 3D Companion */}
       <div className="w-full md:w-1/3 bg-zinc-900 border-r border-zinc-800 flex flex-col relative overflow-hidden">
-        <div className="absolute top-4 left-4 z-10">
+        <div className="absolute top-4 left-4 z-10 flex gap-2">
           <Button variant="outline" className="border-zinc-700 hover:bg-zinc-800" onClick={() => router.push('/')}>
             ← Back to Map
+          </Button>
+          <Button variant="outline" className="border-zinc-700 hover:bg-zinc-800" onClick={() => setVoiceEnabled(!voiceEnabled)}>
+            {voiceEnabled ? '🔊 Voice On' : '🔇 Voice Off'}
           </Button>
         </div>
         
@@ -74,7 +139,12 @@ export default function ChatPage() {
           <Canvas camera={{ position: [0, 0, 6], fov: 45 }}>
             <ambientLight intensity={0.5} />
             <directionalLight position={[10, 10, 5]} intensity={1} />
-            <Companion3D emotion={currentEmotion} intensity={currentIntensity} />
+            <Companion3D 
+              emotion={currentEmotion} 
+              intensity={currentIntensity} 
+              isSpeaking={isSpeaking}
+              appearance={{ primaryColor: '#3b82f6', hasGlasses: true, eyeColor: '#ffffff' }}
+            />
             <ContactShadows position={[0, -2, 0]} opacity={0.5} scale={10} blur={2} far={4} />
             <Environment preset="city" />
           </Canvas>
@@ -112,6 +182,9 @@ export default function ChatPage() {
 
         <form onSubmit={handleSend} className="p-6 bg-zinc-950 border-t border-zinc-800">
           <div className="flex gap-4">
+            <Button type="button" onClick={toggleListen} variant="outline" className={`rounded-full px-6 h-auto border-zinc-700 ${isListening ? 'bg-red-900/50 text-red-400 border-red-500' : 'hover:bg-zinc-800'}`}>
+              {isListening ? 'Listening...' : '🎤 PTT'}
+            </Button>
             <input
               type="text"
               value={input}
@@ -119,7 +192,7 @@ export default function ChatPage() {
               placeholder="Tell me about your progress..."
               className="flex-1 bg-zinc-900 border border-zinc-700 rounded-full px-6 py-4 focus:outline-none focus:border-blue-500 transition-colors"
             />
-            <Button type="submit" disabled={loading} className="rounded-full h-auto px-8 bg-blue-600 hover:bg-blue-700">
+            <Button type="submit" disabled={loading || !input.trim()} className="rounded-full h-auto px-8 bg-blue-600 hover:bg-blue-700">
               Send
             </Button>
           </div>

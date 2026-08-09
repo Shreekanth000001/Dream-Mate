@@ -26,7 +26,12 @@ class GeminiProvider(AIProvider):
             role = "user" if msg["role"] == "user" else "model"
             history.append({"role": role, "parts": [msg["content"]]})
             
-        system_prompt += "\n\nCRITICAL INSTRUCTION: You must respond in valid JSON format. The JSON schema should be: {\"message\": \"your text reply\", \"avatar_emotion\": {\"emotion\": \"neutral|happy|excited|sad|concerned|empathetic|encouraging|proud|curious|thinking|surprised|calm\", \"intensity\": 0.0-1.0}}"
+        system_prompt += "\n\nCRITICAL INSTRUCTION: You must respond in valid JSON format. The JSON schema should be:\n"
+        system_prompt += "{\n"
+        system_prompt += "  \"message\": \"your text reply\",\n"
+        system_prompt += "  \"avatar_emotion\": {\"emotion\": \"neutral|happy|excited|sad|concerned|empathetic|encouraging|proud|curious|thinking|surprised|calm|frustrated|sleepy\", \"intensity\": 0.0-1.0},\n"
+        system_prompt += "  \"shouldSpeak\": true  // set to true unless it's a very trivial acknowledgement\n"
+        system_prompt += "}"
         
         # In a real app we would use system_instruction in GenerativeModel
         model = genai.GenerativeModel(
@@ -48,9 +53,12 @@ class GeminiProvider(AIProvider):
 
     def extract_memories(self, text: str) -> List[str]:
         prompt = f"""
-        Extract the most important facts, goals, or preferences from the following text.
+        Extract ONLY the most important long-term facts, goals, preferences, or recurring obstacles from the following conversation.
+        DO NOT extract temporary conversational noise, greetings, or trivial short-term information.
+        If there is nothing of long-term importance, return an empty response.
         Return them as a simple bulleted list.
-        Text: {text}
+        Conversation:
+        {text}
         """
         try:
             response = self.model.generate_content(prompt)

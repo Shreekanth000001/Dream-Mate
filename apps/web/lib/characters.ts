@@ -15,43 +15,19 @@ export interface CharacterDef {
 
 export const CHARACTER_REGISTRY: CharacterDef[] = [
   {
-    id: 'alex',
-    name: 'Alex',
-    model: '/characters/alex.glb',
-    personalityId: 'supportive',
-    personalityTags: ['Friendly', 'Supportive'],
-    defaultTransform: { position: [0, -1.6, 0], rotation: [0, 0, 0], scale: 1.5, cameraPosition: [0, 0.2, 1.4], cameraTarget: [0, 0.1, 0] }
-  },
-  {
-    id: 'maya',
-    name: 'Maya',
-    model: '/characters/maya.glb',
-    personalityId: 'calm',
-    personalityTags: ['Calm', 'Caring'],
-    defaultTransform: { position: [0, -1.6, 0], rotation: [0, 0, 0], scale: 1.5, cameraPosition: [0, 0.2, 1.4], cameraTarget: [0, 0.1, 0] }
-  },
-  {
-    id: 'kai',
-    name: 'Kai',
-    model: '/characters/kai.glb',
+    id: 'boy',
+    name: 'Boy',
+    model: '/characters/boy.vrm',
     personalityId: 'funny',
-    personalityTags: ['Funny', 'Energetic'],
-    defaultTransform: { position: [0, -1.6, 0], rotation: [0, 0, 0], scale: 1.5, cameraPosition: [0, 0.2, 1.4], cameraTarget: [0, 0.1, 0] }
+    personalityTags: ['Friendly', 'Energetic'],
+    defaultTransform: { position: [0, -0.9, 0], rotation: [0, 0, 0], scale: 1.0, cameraPosition: [0, 0.4, 1.8], cameraTarget: [0, 0.4, 0] }
   },
   {
-    id: 'nova',
-    name: 'Nova',
-    model: '/characters/nova.glb',
-    personalityId: 'curious',
-    personalityTags: ['Curious', 'Adventurous'],
-    defaultTransform: { position: [0, -1.6, 0], rotation: [0, 0, 0], scale: 1.5, cameraPosition: [0, 0.2, 1.4], cameraTarget: [0, 0.1, 0] }
-  },
-  {
-    id: 'default',
-    name: 'Default',
-    model: '/avatar.glb',
+    id: 'girl',
+    name: 'Girl',
+    model: '/characters/girl.vrm',
     personalityId: 'supportive',
-    personalityTags: ['Standard', 'Friendly'],
-    defaultTransform: { position: [0, -1.6, 0], rotation: [0, 0, 0], scale: 1.5, cameraPosition: [0, 0.2, 1.4], cameraTarget: [0, 0.1, 0] }
+    personalityTags: ['Calm', 'Supportive'],
+    defaultTransform: { position: [0, -0.9, 0], rotation: [0, 0, 0], scale: 1.0, cameraPosition: [0, 0.4, 1.8], cameraTarget: [0, 0.4, 0] }
   }
 ];

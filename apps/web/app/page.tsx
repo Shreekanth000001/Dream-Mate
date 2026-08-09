@@ -44,11 +44,11 @@ const CompanionStage = React.memo(function CompanionStage({
   if (!companion) return null;
 
   const appearanceObj = (companion.appearance || {}) as Record<string, unknown>;
-  const baseAvatar = (appearanceObj.baseAvatar as string) || "default";
+  const baseAvatar = (appearanceObj.baseAvatar as string) || "boy";
   
-  // Resolve default transforms if not saved in appearance
-  const character = CHARACTER_REGISTRY.find(c => c.id === baseAvatar) || CHARACTER_REGISTRY.find(c => c.id === 'default');
-  const fallbackTransform = character?.defaultTransform || { position: [0, -1.6, 0], rotation: [0, 0, 0], scale: 1.5, cameraPosition: [0, 0.2, 1.4], cameraTarget: [0, 0.1, 0] };
+  // Resolve default transforms for current character
+  const character = CHARACTER_REGISTRY.find(c => c.id === baseAvatar) || CHARACTER_REGISTRY[0];
+  const fallbackTransform = character?.defaultTransform || { position: [0, -1.4, 0], rotation: [0, 0, 0], scale: 1.0, cameraPosition: [0, 1.4, 1.2], cameraTarget: [0, 1.4, 0] };
   
   const savedTransform = appearanceObj.transform as any;
   const savedCamera = appearanceObj.camera as any;
@@ -69,11 +69,6 @@ const CompanionStage = React.memo(function CompanionStage({
         appearance={{
           baseAvatar,
           transform,
-          primaryColor: (appearanceObj.primaryColor as string) || "#6366f1",
-          skinColor: (appearanceObj.skinColor as string) || "#fcd5ce",
-          hairColor: (appearanceObj.hairColor as string) || "#3b2f2f",
-          hasGlasses: (appearanceObj.hasGlasses as boolean) || false,
-          eyeColor: (appearanceObj.eyeColor as string) || "#ffffff"
         }} 
         isSpeaking={isSpeaking} 
         gesture={gesture}
@@ -220,6 +215,16 @@ export default function HomePage() {
       
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
+      
+      const voiceURI = appearanceObj.voiceURI as string;
+      if (voiceURI) {
+        const voices = window.speechSynthesis.getVoices();
+        const selectedVoice = voices.find(v => v.voiceURI === voiceURI);
+        if (selectedVoice) {
+          utterance.voice = selectedVoice;
+        }
+      }
+
       utterance.rate = 1.0;
       utterance.pitch = 1.1;
 
@@ -333,6 +338,9 @@ export default function HomePage() {
       
       {/* Global Toggles */}
       <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
+        <button onClick={() => router.push('/customize')} className="p-2 bg-white/5 border border-white/10 rounded-full hover:bg-white/10 transition-all text-xs flex items-center gap-1 text-gray-300 hover:text-white" title="Customize companion">
+          🎨 Customize
+        </button>
         {isVoiceEnabled && isSpeaking && (
           <button onClick={stopSpeaking} className="p-2 bg-red-500/20 text-red-400 border border-red-500/30 rounded-full hover:bg-red-500/30 transition-all text-xs flex items-center gap-1" title="Stop speaking">
             <span>⏹</span>

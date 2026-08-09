@@ -1,23 +1,16 @@
 "use client";
 
-import { useRef, useState, useEffect, useMemo } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { MathUtils, Group, SkinnedMesh, AnimationMixer, AnimationClip, LoopRepeat, LoopOnce } from 'three';
+import { Group, Quaternion, Euler, AnimationMixer } from 'three';
 import { Html } from '@react-three/drei';
-import { GLTFLoader } from 'three-stdlib';
-import { SkeletonUtils } from 'three-stdlib';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { VRMLoaderPlugin, VRM, VRMExpressionPresetName } from '@pixiv/three-vrm';
 import { CHARACTER_REGISTRY } from '@/lib/characters';
 
 export interface AvatarAppearance {
   baseAvatar?: string;
-  primaryColor?: string; // Clothing
-  skinColor?: string;
-  hairColor?: string;
-  eyeColor?: string;
-  hasGlasses?: boolean;
-  hairStyle?: string;
-  outfit?: string;
-  eyeStyle?: string;
+  voiceURI?: string;
   transform?: {
     position: [number, number, number];
     rotation: [number, number, number];
@@ -32,17 +25,6 @@ export interface AvatarAppearance {
 export interface AvatarCapabilities {
   hasHumanoidRig: boolean;
   hasFacialMorphs: boolean;
-  hasAnimations: boolean;
-  hasGlasses: boolean;
-  hasHair: boolean;
-  hasClothing: boolean;
-  hasMultipleHairStyles: boolean;
-  hasMultipleOutfits: boolean;
-  hasMultipleEyeStyles: boolean;
-  hasHairColor: boolean;
-  hasSkinColor: boolean;
-  hasClothingColor: boolean;
-  hasEyeColor: boolean;
 }
 
 interface Companion3DProps {
@@ -54,106 +36,42 @@ interface Companion3DProps {
   onCapabilitiesLoaded?: (caps: AvatarCapabilities) => void;
 }
 
-const EMOTION_TARGETS: Record<string, Record<string, number>> = {
-  neutral: { mouthSmile: 0, mouthFrown: 0, eyeWideLeft: 0, eyeWideRight: 0, browInnerUp: 0 },
-  happy: { mouthSmile: 0.8, mouthFrown: 0, eyeWideLeft: 0.2, eyeWideRight: 0.2, browInnerUp: 0 },
-  excited: { mouthSmile: 1.0, mouthFrown: 0, eyeWideLeft: 0.5, eyeWideRight: 0.5, jawOpen: 0.3, browInnerUp: 0.3 },
-  sad: { mouthSmile: 0, mouthFrown: 0.8, eyeWideLeft: 0, eyeWideRight: 0, browInnerUp: 1.0, mouthRollLower: 0.5 },
-  concerned: { mouthSmile: 0, mouthFrown: 0.5, eyeWideLeft: 0, eyeWideRight: 0, browInnerUp: 0.8 },
-  surprised: { mouthSmile: 0, mouthFrown: 0, eyeWideLeft: 0.8, eyeWideRight: 0.8, jawOpen: 0.8, browInnerUp: 1.0 },
-  thinking: { mouthSmile: 0, mouthFrown: 0, eyeWideLeft: 0, eyeWideRight: 0, browInnerUp: 0.5, eyeSquintLeft: 0.5, eyeSquintRight: 0.5 },
+// Natural relaxed pose offsets from VRM T-pose (in radians)
+const RELAXED_POSE: Record<string, { x: number; y: number; z: number }> = {
+  spine:         { x: 0.0, y: 0.0, z: 0.0 },
+  chest:         { x: 0.0, y: 0.0, z: 0.0 },
+  head:          { x: 0.0, y: 0.0, z: 0.0 },
 };
 
-// Internal component that receives the loaded GLTF and plays animations
+const ENABLE_IDLE_ARM_POSE = true;
+
+const IDLE_POSE = {
+  leftUpperArm:  new Euler(0, 0, -1.25, 'ZYX'),
+  rightUpperArm: new Euler(0, 0,  1.25, 'ZYX'),
+  // X axis bends the elbow. We try +0.25 (14 degrees). 
+  leftLowerArm:  new Euler(0.25, 0, 0, 'ZYX'),
+  rightLowerArm: new Euler(0.25, 0, 0, 'ZYX'),
+  leftHand:      new Euler(0, 0, 0, 'ZYX'),
+  rightHand:     new Euler(0, 0, 0, 'ZYX'),
+};
+
+const VRM_BONES = Object.keys(RELAXED_POSE) as Array<keyof typeof RELAXED_POSE>;
+
 function AvatarRenderer({ 
-  gltf, 
+  vrm, 
+  mixer,
   emotion = 'neutral', 
   gesture = 'none', 
   emoji, 
   appearance, 
   isSpeaking = false,
   onCapabilitiesLoaded
-}: Companion3DProps & { gltf: any }) {
+}: Companion3DProps & { vrm: VRM, mixer: AnimationMixer | null }) {
   const groupRef = useRef<Group>(null);
-  
-  // Clone scene to prevent modifying the cached loader result directly
-  const scene = useMemo(() => SkeletonUtils.clone(gltf.scene), [gltf.scene]);
-  const baseAnimations = gltf.animations || [];
+  const bonesRef = useRef<Record<string, any>>({});
+  const restPoseRef = useRef<Record<string, Quaternion>>({});
+  const poseAppliedRef = useRef(false);
 
-  // Load external animations safely
-  const [externalAnimations, setExternalAnimations] = useState<AnimationClip[]>([]);
-  useEffect(() => {
-    fetch('/animations.glb', { method: 'HEAD' })
-      .then(res => {
-        if (res.ok) {
-          const loader = new GLTFLoader();
-          loader.load('/animations.glb', (animGltf) => {
-            setExternalAnimations(animGltf.animations);
-          }, undefined, () => {});
-        }
-      })
-      .catch(() => {}); // Ignore network errors
-  }, []);
-
-  const allAnimations = useMemo(() => [...baseAnimations, ...externalAnimations], [baseAnimations, externalAnimations]);
-  
-  const mixer = useMemo(() => new AnimationMixer(scene), [scene]);
-
-  // Handle Animation Playback (Gestures & Idle states)
-  useEffect(() => {
-    if (!allAnimations.length) return;
-    mixer.stopAllAction();
-
-    // Determine state
-    let targetClipName = 'Idle';
-    if (gesture && gesture !== 'none') {
-      targetClipName = gesture; // e.g., 'wave', 'pointing'
-    } else if (isSpeaking) {
-      targetClipName = 'Talking';
-    } else if (emotion === 'thinking') {
-      targetClipName = 'Thinking';
-    }
-
-    // Try to find the exact clip, or fallback to first available
-    let clip = allAnimations.find(a => a.name.toLowerCase().includes(targetClipName.toLowerCase()));
-    if (!clip && targetClipName !== 'Idle') {
-      clip = allAnimations.find(a => a.name.toLowerCase().includes('idle'));
-    }
-    if (!clip) clip = allAnimations[0];
-
-    if (clip) {
-      const action = mixer.clipAction(clip);
-      // Play once for specific gestures, loop for idle/talking
-      if (gesture !== 'none' && gesture !== 'idle') {
-        action.setLoop(LoopOnce, 1);
-        action.clampWhenFinished = true;
-      } else {
-        action.setLoop(LoopRepeat, Infinity);
-      }
-      action.reset().fadeIn(0.3).play();
-    }
-  }, [gesture, isSpeaking, emotion, allAnimations, mixer]);
-
-  useFrame((state, delta) => {
-    mixer.update(delta);
-  });
-  
-  // Head Mesh & Morph Targets
-  const headMesh = useMemo(() => {
-    let found = null;
-    scene.traverse((node) => {
-      if ((node as SkinnedMesh).isSkinnedMesh && (node as SkinnedMesh).morphTargetDictionary) {
-        if (!found) found = node;
-        if (node.name.toLowerCase().includes('head')) found = node;
-      }
-    });
-    return found as SkinnedMesh | null;
-  }, [scene]);
-
-  // Fallback head tilt if no animations
-  const headBone = useMemo(() => scene.getObjectByName('Head'), [scene]);
-
-  // Emoji logic
   const [showEmoji, setShowEmoji] = useState(false);
   const [currentEmoji, setCurrentEmoji] = useState(emoji);
 
@@ -168,150 +86,141 @@ function AvatarRenderer({
       const timer = setTimeout(() => setShowEmoji(false), 3000);
       return () => clearTimeout(timer);
     }
-  }, [emoji]);
+  }, [emoji, currentEmoji, showEmoji]);
 
-  // Morph Targets
-  useFrame((state, delta) => {
-    if (!headMesh || !headMesh.morphTargetDictionary || !headMesh.morphTargetInfluences) return;
-    
-    const targetState = EMOTION_TARGETS[emotion] || EMOTION_TARGETS['neutral'];
-    const lerpSpeed = Math.min(delta * 8, 1);
-    const dict = headMesh.morphTargetDictionary;
-    const influences = headMesh.morphTargetInfluences;
-
-    const applyTarget = (keys: string[], targetValue: number) => {
-      for (const key of keys) {
-        if (dict[key] !== undefined) {
-          const idx = dict[key];
-          influences[idx] = MathUtils.lerp(influences[idx], targetValue, lerpSpeed);
-        }
-      }
-    };
-    
-    // Apply full ARKit map if present, or fallback to primitive mouthSmile
-    Object.entries(targetState).forEach(([key, val]) => {
-      applyTarget([key, key + 'Left', key + 'Right'], val as number);
-    });
-    
-    // Jaw Open/Speaking
-    let targetJaw = targetState.jawOpen || 0;
-    if (isSpeaking) {
-      targetJaw = (Math.sin(state.clock.elapsedTime * 15) * 0.5 + 0.5) * 0.8;
-    }
-    applyTarget(['jawOpen', 'mouthOpen'], targetJaw);
-
-    // Fallback body language (if no animations are playing)
-    if (headBone && allAnimations.length === 0) {
-      let tiltX = 0, tiltY = 0, tiltZ = 0;
-      if (emotion === 'sad') tiltX = 0.2;
-      else if (emotion === 'excited') tiltX = -0.2;
-      else if (emotion === 'thinking') { tiltY = -0.2; tiltZ = -0.1; }
-      else if (emotion === 'concerned') { tiltX = 0.1; tiltY = 0.1; tiltZ = -0.05; }
-      
-      headBone.rotation.x = MathUtils.lerp(headBone.rotation.x, tiltX, lerpSpeed);
-      headBone.rotation.y = MathUtils.lerp(headBone.rotation.y, tiltY, lerpSpeed);
-      headBone.rotation.z = MathUtils.lerp(headBone.rotation.z, tiltZ, lerpSpeed);
-    }
-  });
-  
-  // Customization
   useEffect(() => {
-    let hasHumanoidRig = false;
-    let hasFacialMorphs = false;
-    let hasGlasses = false;
-    let hasHair = false;
-    let hasClothing = false;
+    if (!vrm) return;
     
-    let hasHairColor = false;
-    let hasSkinColor = false;
-    let hasClothingColor = false;
-    let hasEyeColor = false;
-
-    // For future modular assets:
-    // If we find multiple distinct meshes for hair (e.g. hair_1, hair_2), we set this to true.
-    let hairMeshNames = new Set<string>();
-    let outfitMeshNames = new Set<string>();
-    let eyeMeshNames = new Set<string>();
-
-    scene.traverse((node: any) => {
-      if (node.isBone && (node.name.toLowerCase().includes('head') || node.name.toLowerCase().includes('spine'))) {
-        hasHumanoidRig = true;
-      }
-      
-      if (node.isMesh || node.isSkinnedMesh) {
-        if (node.morphTargetDictionary && Object.keys(node.morphTargetDictionary).length > 0) {
-          hasFacialMorphs = true;
-        }
-
-        const nodeName = node.name.toLowerCase();
-        const matName = node.material?.name?.toLowerCase() || '';
-
-        if (nodeName.includes('glass') || nodeName.includes('headwear') || matName.includes('glass')) {
-          hasGlasses = true;
-        }
-        if (nodeName.includes('hair') || nodeName.includes('beard') || matName.includes('hair') || matName.includes('beard')) {
-          hasHair = true;
-          hasHairColor = true; // Assuming existing meshes allow tinting
-          if (nodeName.includes('hair_')) hairMeshNames.add(nodeName);
-        }
-        if (matName.includes('shirt') || matName.includes('outfit') || matName.includes('top') || matName.includes('bottom')) {
-          hasClothing = true;
-          hasClothingColor = true;
-          if (nodeName.includes('outfit_')) outfitMeshNames.add(nodeName);
-        }
-        if (matName.includes('skin') || matName.includes('body') || matName.includes('head')) {
-          hasSkinColor = true;
-        }
-        if (matName.includes('eye') && !matName.includes('lash') && !matName.includes('brow')) {
-          hasEyeColor = true;
-          if (nodeName.includes('eye_')) eyeMeshNames.add(nodeName);
-        }
-
-        if (appearance?.primaryColor && (matName.includes('shirt') || matName.includes('outfit') || matName.includes('top') || matName.includes('bottom'))) {
-          if (node.material.color) node.material.color.set(appearance.primaryColor);
-        }
-        if (appearance?.hairColor && (matName.includes('hair') || matName.includes('beard'))) {
-          if (node.material.color) node.material.color.set(appearance.hairColor);
-        }
-        if (appearance?.skinColor && (matName.includes('skin') || matName.includes('body') || matName.includes('head'))) {
-          if (node.material.color) node.material.color.set(appearance.skinColor);
-        }
-        if (appearance?.eyeColor && (matName.includes('eye') && !matName.includes('lash') && !matName.includes('brow'))) {
-          if (node.material.color) node.material.color.set(appearance.eyeColor);
-        }
-        
-        // Apply Glasses Visibility
-        if (nodeName.includes('glass') || nodeName.includes('headwear') || matName.includes('glass')) {
-          node.visible = appearance?.hasGlasses ?? false;
-        }
-        
-        // Future: Handle multiple mesh visibility
-        // if (hairMeshNames.size > 1 && nodeName.includes('hair_')) {
-        //    node.visible = (appearance?.hairStyle === nodeName);
-        // }
-      }
-    });
-
     if (onCapabilitiesLoaded) {
       onCapabilitiesLoaded({
-        hasHumanoidRig,
-        hasFacialMorphs,
-        hasAnimations: allAnimations.length > 0,
-        hasGlasses,
-        hasHair,
-        hasClothing,
-        hasMultipleHairStyles: hairMeshNames.size > 1,
-        hasMultipleOutfits: outfitMeshNames.size > 1,
-        hasMultipleEyeStyles: eyeMeshNames.size > 1,
-        hasHairColor,
-        hasSkinColor,
-        hasClothingColor,
-        hasEyeColor
+        hasHumanoidRig: !!vrm.humanoid,
+        hasFacialMorphs: !!vrm.expressionManager,
       });
     }
-  }, [appearance, scene, allAnimations, onCapabilitiesLoaded]);
+    
+    if (vrm.humanoid) {
+      const bones: Record<string, any> = {};
+      const restPose: Record<string, Quaternion> = {};
+      
+      for (const boneName of VRM_BONES) {
+        const node = vrm.humanoid.getNormalizedBoneNode(boneName as any);
+        if (node) {
+          bones[boneName] = node;
+          // Store the original rest quaternion BEFORE we modify anything
+          restPose[boneName] = node.quaternion.clone();
+        }
+      }
+      
+      bonesRef.current = bones;
+      restPoseRef.current = restPose;
+      poseAppliedRef.current = false;
+      
+      // Apply the relaxed pose immediately so the first frame isn't T-pose
+      applyRelaxedPose(bones, restPose);
+      poseAppliedRef.current = true;
+    }
+  }, [vrm, onCapabilitiesLoaded]);
 
-  const transform = appearance?.transform || { position: [0, -1.6, 0], rotation: [0, 0, 0], scale: 1.5 };
+  // Helper: apply relaxed pose using rest quaternion + offset
+  function applyRelaxedPose(bones: Record<string, any>, restPose: Record<string, Quaternion>) {
+    for (const boneName of VRM_BONES) {
+      const node = bones[boneName];
+      const rest = restPose[boneName];
+      if (!node || !rest) continue;
+      
+      const offset = RELAXED_POSE[boneName];
+      const offsetQuat = new Quaternion().setFromEuler(
+        new Euler(offset.x, offset.y, offset.z, 'XYZ')
+      );
+      // Final = rest * offset
+      node.quaternion.copy(rest).multiply(offsetQuat);
+    }
+  }
+
+  useFrame((state, delta) => {
+    if (!vrm) return;
+    
+    const lerpSpeed = Math.min(delta * 6, 1);
+    const bones = bonesRef.current;
+    const restPose = restPoseRef.current;
+    
+    if (vrm.expressionManager) {
+      Object.values(VRMExpressionPresetName).forEach(name => {
+        vrm.expressionManager!.setValue(name, 0);
+      });
+      
+      let expr = VRMExpressionPresetName.Neutral;
+      if (emotion === 'happy' || emotion === 'excited') expr = VRMExpressionPresetName.Happy;
+      else if (emotion === 'sad') expr = VRMExpressionPresetName.Sad;
+      else if (emotion === 'angry' || emotion === 'concerned') expr = VRMExpressionPresetName.Angry;
+      else if (emotion === 'relaxed') expr = VRMExpressionPresetName.Relaxed;
+      else if (emotion === 'surprised') expr = VRMExpressionPresetName.Surprised;
+      
+      vrm.expressionManager.setValue(expr, 1.0);
+      
+      if (isSpeaking) {
+        const t = state.clock.elapsedTime;
+        const aa = (Math.sin(t * 12) * 0.5 + 0.5) * 0.6;
+        const oh = (Math.cos(t * 8) * 0.5 + 0.5) * 0.3;
+        vrm.expressionManager.setValue(VRMExpressionPresetName.Aa, aa);
+        vrm.expressionManager.setValue(VRMExpressionPresetName.Oh, oh);
+      }
+      
+      vrm.expressionManager.update();
+    }
+    
+    // 2. Procedural bone animation (offsets from relaxed pose)
+    // Head: emotional tilts
+    if (bones.head && restPose.head) {
+      let hx = RELAXED_POSE.head.x;
+      let hy = RELAXED_POSE.head.y;
+      let hz = RELAXED_POSE.head.z;
+      
+      if (emotion === 'sad') hx += 0.12;
+      else if (emotion === 'excited') hx -= 0.08;
+      else if (emotion === 'thinking') { hy -= 0.15; hz -= 0.06; }
+      else if (emotion === 'concerned') { hx += 0.06; hy += 0.06; }
+      
+      const targetQuat = new Quaternion().setFromEuler(new Euler(hx, hy, hz, 'XYZ'));
+      const finalQuat = restPose.head.clone().multiply(targetQuat);
+      bones.head.quaternion.slerp(finalQuat, lerpSpeed);
+    }
+    
+    // Arms remain in their native rest pose.
+    // Removed asymmetric speaking/thinking arm animations per requirements.
+    
+    if (ENABLE_IDLE_ARM_POSE) {
+      const armBones = ['leftUpperArm', 'rightUpperArm', 'leftLowerArm', 'rightLowerArm', 'leftHand', 'rightHand'];
+      for (const boneName of armBones) {
+        const node = bones[boneName];
+        const rest = restPose[boneName];
+        if (node && rest) {
+          const euler = IDLE_POSE[boneName as keyof typeof IDLE_POSE];
+          if (euler) {
+            const targetQuat = new Quaternion().setFromEuler(euler);
+            const finalQuat = rest.clone().multiply(targetQuat);
+            node.quaternion.slerp(finalQuat, lerpSpeed);
+          }
+        }
+      }
+    }
+    
+    // Left arm stays relaxed (no dynamic animation for left arm)
+    // Already set by initial applyRelaxedPose, no per-frame changes needed.
+    
+    // 3. SpringBones (hair/clothing physics)
+    if (vrm.springBoneManager) {
+      vrm.springBoneManager.update(delta);
+    }
+    
+    if (mixer) {
+      mixer.update(delta);
+    }
+    
+    vrm.update(delta);
+  });
+
+  const transform = appearance?.transform || { position: [0, -1.4, 0], rotation: [0, 0, 0], scale: 1.0 };
 
   return (
     <group ref={groupRef} position={transform.position} rotation={transform.rotation} scale={[transform.scale, transform.scale, transform.scale]}>
@@ -322,51 +231,131 @@ function AvatarRenderer({
           </div>
         </Html>
       )}
-      <primitive object={scene} />
+      <primitive object={vrm.scene} />
     </group>
   );
 }
 
-// Wrapper to handle dynamic GLB loading gracefully
+// Wrapper to handle dynamic VRM loading
 export function Companion3D(props: Companion3DProps) {
   const [modelStatus, setModelStatus] = useState<'loading'|'ready'|'error'>('loading');
-  const [gltfData, setGltfData] = useState<any>(null);
+  const [vrm, setVrm] = useState<VRM | null>(null);
+  const [mixer, setMixer] = useState<AnimationMixer | null>(null);
+  const [errorUrl, setErrorUrl] = useState('');
+  const prevUrlRef = useRef<string>('');
   
-  const baseAvatar = props.appearance?.baseAvatar || 'default';
-  const character = CHARACTER_REGISTRY.find(c => c.id === baseAvatar) || CHARACTER_REGISTRY.find(c => c.id === 'default');
-  const url = character ? character.model : '/avatar.glb';
+  const baseAvatar = props.appearance?.baseAvatar || 'boy';
+  const character = CHARACTER_REGISTRY.find(c => c.id === baseAvatar);
+  // No silent fallback: if character not found, we will show an error
+  const url = character ? character.model : '';
   
   useEffect(() => {
-    setModelStatus('loading');
-    const loader = new GLTFLoader();
-    
-    loader.load(url, (gltf) => {
-      setGltfData(gltf);
-      setModelStatus('ready');
-    }, undefined, () => {
-      console.error(`Failed to load ${url}. Asset does not exist.`);
+    if (!url) {
+      setErrorUrl(`Unknown character: ${baseAvatar}`);
       setModelStatus('error');
-    });
+      return;
+    }
+    
+    // Skip if same URL already loaded
+    if (url === prevUrlRef.current && vrm) return;
+    prevUrlRef.current = url;
+    
+    setModelStatus('loading');
+    
+    const loader = new GLTFLoader();
+    loader.crossOrigin = 'anonymous';
+    loader.register((parser) => new VRMLoaderPlugin(parser));
+    
+    console.log(`[VRM Loader] Starting load for URL: ${url}`);
+    
+    loader.load(
+       url, 
+       (gltf) => {
+          console.log(`[VRM Loader] GLTF loaded successfully from ${url}`, gltf);
+          const loadedVrm = gltf.userData.vrm as VRM;
+          if (!loadedVrm) {
+            console.error(`[VRM Loader] File loaded but no VRM data found in userData for ${url}`);
+            setErrorUrl(url);
+            setModelStatus('error');
+            return;
+          }
+          
+          console.log(`[VRM Loader] VRM loaded successfully`, loadedVrm);
+          console.log(`[VRM Loader] VRM scene children count:`, loadedVrm.scene.children.length);
+          console.log(`[VRM Loader] VRM humanoid available:`, !!loadedVrm.humanoid);
+          
+          // Disable frustum culling
+          loadedVrm.scene.traverse((obj) => {
+             obj.frustumCulled = false;
+          });
+          
+          // Cleanup previous VRM
+          if (vrm) {
+            vrm.scene.traverse((obj: any) => {
+              if (obj.geometry) obj.geometry.dispose();
+              if (obj.material) {
+                if (Array.isArray(obj.material)) {
+                  obj.material.forEach((m: any) => m.dispose());
+                } else {
+                  obj.material.dispose();
+                }
+              }
+            });
+          }
+          
+          // Check for native idle animation
+          let newMixer: AnimationMixer | null = null;
+          if (gltf.animations && gltf.animations.length > 0) {
+            const clipNames = gltf.animations.map(a => a.name).join(', ');
+            console.log(`[VRM Loader] Found ${gltf.animations.length} native animations: ${clipNames}. Playing the first one.`);
+            newMixer = new AnimationMixer(loadedVrm.scene);
+            const action = newMixer.clipAction(gltf.animations[0]);
+            action.play();
+          } else {
+            console.log(`[VRM Loader] VRM has no idle animation (No animations found in GLTF).`);
+          }
+          
+          setVrm(loadedVrm);
+          setMixer(newMixer);
+          setModelStatus('ready');
+       }, 
+       (progress) => {
+          console.log(`[VRM Loader] Progress for ${url}:`, progress.loaded, '/', progress.total);
+       }, 
+       (error) => {
+          console.error(`[VRM Loader] Failed to load VRM ${url}:`);
+          console.error(error);
+          if (error instanceof Error) {
+            console.error("Stack trace:", error.stack);
+          }
+          setErrorUrl(url);
+          setModelStatus('error');
+       }
+    );
   }, [url]);
 
-  if (modelStatus === 'loading') return null;
+  if (modelStatus === 'loading') {
+    return (
+      <Html center className="pointer-events-none">
+        <div className="text-white text-sm bg-black/60 px-4 py-2 rounded-xl backdrop-blur-md">
+          Loading avatar...
+        </div>
+      </Html>
+    );
+  }
   
-  if (modelStatus === 'error') {
+  if (modelStatus === 'error' || !vrm) {
      return (
        <group position={[0, 0, 0]}>
-         <mesh>
-           <boxGeometry args={[0.5, 0.5, 0.5]} />
-           <meshBasicMaterial color="red" />
-         </mesh>
          <Html center className="pointer-events-none w-64 text-center">
            <div className="bg-red-500/90 p-4 text-sm text-white rounded-xl shadow-xl backdrop-blur-md border border-white/20">
-             <span className="font-bold block mb-1">Missing Avatar Asset</span>
-             Please download <b>{url}</b> and place it in the `public/` directory.
+             <span className="font-bold block mb-1">Avatar Load Error</span>
+             Could not load <b>{errorUrl}</b>.
            </div>
          </Html>
        </group>
      );
   }
   
-  return <AvatarRenderer gltf={gltfData} {...props} />;
+  return <AvatarRenderer vrm={vrm} mixer={mixer} {...props} />;
 }

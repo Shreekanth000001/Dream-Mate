@@ -8,7 +8,8 @@ class AIProvider(ABC):
         self, 
         system_prompt: str, 
         messages: List[Dict[str, str]], 
-        tools: List[Dict[str, Any]] = None
+        tools: List[Dict[str, Any]] = None,
+        model_type: str = "chat"
     ) -> str:
         """Generates a chat response from the model."""
         pass

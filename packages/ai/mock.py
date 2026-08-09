@@ -2,7 +2,7 @@ from typing import List, Dict, Any
 from packages.ai.provider import AIProvider
 
 class MockProvider(AIProvider):
-    def generate_chat_response(self, system_prompt: str, messages: List[Dict[str, str]], tools: List[Dict[str, Any]] = None) -> str:
+    def generate_chat_response(self, system_prompt: str, messages: List[Dict[str, str]], tools: List[Dict[str, Any]] = None, model_type: str = "chat") -> str:
         return '{"message": "This is a mock AI response for testing.", "avatar_emotion": {"emotion": "neutral", "intensity": 0.5}}'
 
     def extract_memories(self, text: str) -> List[str]:

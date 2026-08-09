@@ -104,8 +104,14 @@ def send_message(
     
     system_prompt = generate_system_prompt(companion, dreams, tasks, semantic_memories)
     
-    # Generate AI response (which is now JSON)
-    reply_json_str = ai_provider.generate_chat_response(system_prompt, messages_formatted)
+    # Determine model routing based on content complexity
+    message_content = req.message.lower()
+    reasoning_keywords = ["plan", "complex", "goal", "strategy", "analyze", "why", "how to", "figure out", "break down"]
+    requires_reasoning = any(word in message_content for word in reasoning_keywords)
+    model_type = "reasoning" if requires_reasoning else "chat"
+    
+    # Generate AI response
+    reply_json_str = ai_provider.generate_chat_response(system_prompt, messages_formatted, model_type=model_type)
     
     import json
     try:

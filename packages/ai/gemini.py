@@ -12,13 +12,17 @@ class GeminiProvider(AIProvider):
             raise ValueError("GEMINI_API_KEY configuration is missing. AI functionality cannot be used.")
             
         genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel('gemini-1.5-flash')
+        self.chat_model_name = settings.GEMINI_CHAT_MODEL
+        self.reasoning_model_name = settings.GEMINI_REASONING_MODEL
+        self.background_model_name = settings.GEMINI_BACKGROUND_MODEL
+        self.embedding_model_name = settings.GEMINI_EMBEDDING_MODEL
         
     def generate_chat_response(
         self, 
         system_prompt: str, 
         messages: List[Dict[str, str]], 
-        tools: List[Dict[str, Any]] = None
+        tools: List[Dict[str, Any]] = None,
+        model_type: str = "chat"
     ) -> str:
         # Convert our standard message format to Gemini's format
         history = []
@@ -33,9 +37,11 @@ class GeminiProvider(AIProvider):
         system_prompt += "  \"shouldSpeak\": true  // set to true unless it's a very trivial acknowledgement\n"
         system_prompt += "}"
         
+        model_name = self.reasoning_model_name if model_type == "reasoning" else self.chat_model_name
+        
         # In a real app we would use system_instruction in GenerativeModel
         model = genai.GenerativeModel(
-            'gemini-1.5-flash',
+            model_name,
             system_instruction=system_prompt,
             generation_config=genai.types.GenerationConfig(
                 response_mime_type="application/json",
@@ -61,7 +67,8 @@ class GeminiProvider(AIProvider):
         {text}
         """
         try:
-            response = self.model.generate_content(prompt)
+            model = genai.GenerativeModel(self.background_model_name)
+            response = model.generate_content(prompt)
             # Parse bullets
             lines = [line.strip("- *").strip() for line in response.text.split("\n") if line.strip("- *").strip()]
             return lines
@@ -71,7 +78,7 @@ class GeminiProvider(AIProvider):
     def get_embedding(self, text: str) -> List[float]:
         try:
             result = genai.embed_content(
-                model="models/text-embedding-004",
+                model=self.embedding_model_name,
                 content=text
             )
             return result['embedding']

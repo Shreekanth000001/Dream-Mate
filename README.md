@@ -9,7 +9,28 @@ Most AI companions and social media platforms are optimized for screen time and 
 ## Solution
 DREAMMATE actively tracks user sessions. If a user spends too much time chatting, DREAMMATE will gently suggest they take a break, work on their real-world goals, or go outside. It remembers their long-term dreams and holds them accountable without being abusive or manipulative.
 
-## Architecture
+## Prerequisites
+- Node.js 18+
+- Python 3.12+
+
+## Environment Setup
+
+The AI capabilities of DreamMate rely on the Gemini API. To run it locally:
+
+1. Copy the example environment file:
+   ```bash
+   cp apps/api/.env.example apps/api/.env
+   ```
+2. Edit `apps/api/.env` and add your real Gemini API key:
+   ```env
+   GEMINI_API_KEY="your_actual_key_here"
+   DATABASE_URL="sqlite:///./dreammate.db"
+   AI_PROVIDER="gemini"
+   ```
+
+*(Note: The actual `.env` file is git-ignored and should never be committed.)*
+
+## Getting Started
 - **Frontend**: Next.js App Router, Tailwind CSS, shadcn/ui.
 - **Backend**: FastAPI, SQLAlchemy, Pydantic.
 - **Database**: SQLite (MVP Fallback for restricted environments).

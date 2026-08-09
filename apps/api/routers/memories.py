@@ -4,9 +4,15 @@ from typing import List, Dict, Any
 from apps.api import models, schemas, auth
 from apps.api.database import get_db, SessionLocal
 from packages.ai.gemini import GeminiProvider
+from packages.ai.mock import MockProvider
+from apps.api.config import settings
 
 router = APIRouter(prefix="/memories", tags=["memories"])
-ai_provider = GeminiProvider()
+
+if settings.AI_PROVIDER == "mock":
+    ai_provider = MockProvider()
+else:
+    ai_provider = GeminiProvider()
 
 def consolidate_memories_task(user_id: str, conversation_id: str):
     # This runs in the background

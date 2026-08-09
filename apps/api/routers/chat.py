@@ -5,10 +5,16 @@ from typing import List
 from apps.api import models, schemas, auth
 from apps.api.database import get_db
 from packages.ai.gemini import GeminiProvider
+from packages.ai.mock import MockProvider
+from apps.api.config import settings
 from apps.api.routers.memories import consolidate_memories_task
 
 router = APIRouter(prefix="/chat", tags=["chat"])
-ai_provider = GeminiProvider()
+
+if settings.AI_PROVIDER == "mock":
+    ai_provider = MockProvider()
+else:
+    ai_provider = GeminiProvider()
 
 class ChatRequest(BaseModel):
     message: str

@@ -2,13 +2,16 @@ import os
 import google.generativeai as genai
 from typing import List, Dict, Any
 from packages.ai.provider import AIProvider
+from apps.api.config import settings
 
 class GeminiProvider(AIProvider):
     def __init__(self):
-        # Retrieve the API key from environment
-        api_key = os.getenv("GEMINI_API_KEY")
-        if api_key:
-            genai.configure(api_key=api_key)
+        # Retrieve the API key from environment via Pydantic settings
+        api_key = settings.GEMINI_API_KEY
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY configuration is missing. AI functionality cannot be used.")
+            
+        genai.configure(api_key=api_key)
         self.model = genai.GenerativeModel('gemini-1.5-flash')
         
     def generate_chat_response(

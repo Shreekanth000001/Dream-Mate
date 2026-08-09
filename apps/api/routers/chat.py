@@ -34,24 +34,39 @@ class ChatResponse(BaseModel):
     take_break_suggested: bool = False
 
 def generate_system_prompt(companion: models.Companion, dreams: List[models.Dream], tasks: List[models.Task], semantic_memories: List[str] = None) -> str:
-    prompt = f"You are {companion.name}, a supportive AI companion. Your personality style is {companion.personality_style} and accountability style is {companion.accountability_style}.\n"
-    prompt += "Your core philosophy is to help the user achieve their real-world dreams, NOT to keep them chatting endlessly. You care about them.\n"
+    personality_traits = {
+        "calm": "You speak in a calm, measured, gentle tone. You are patient and thoughtful.",
+        "funny": "You have a warm sense of humor. You use light jokes and playful language to keep things fun.",
+        "energetic": "You are enthusiastic and upbeat! You use exclamation marks and encouraging energy.",
+        "caring": "You are deeply empathetic and nurturing. You always validate feelings before offering advice.",
+        "curious": "You ask thoughtful follow-up questions. You are genuinely interested in learning about the user.",
+        "supportive": "You are warm, supportive, and encouraging. You celebrate small wins.",
+    }
+    personality_desc = personality_traits.get(companion.personality_style, personality_traits["supportive"])
+    
+    prompt = f"You are {companion.name}, a personal AI companion for a teenager.\n"
+    prompt += f"PERSONALITY: {personality_desc}\n\n"
+    prompt += "CORE RULES:\n"
+    prompt += "- You are warm, supportive, conversational, and non-judgmental.\n"
+    prompt += "- You do NOT pretend to be human. You are an AI companion and you are honest about it.\n"
+    prompt += "- You do NOT claim to be a therapist or medical professional.\n"
+    prompt += "- You do NOT encourage emotional dependency. Never say things like 'I'm all you need' or 'Don't leave me.'\n"
+    prompt += "- You ENCOURAGE real friendships, family relationships, hobbies, outdoor activities, and human connection.\n"
+    prompt += "- You occasionally suggest taking breaks from the app.\n"
+    prompt += "- For serious mental health or safety situations, encourage seeking appropriate human/professional help.\n"
+    prompt += "- You remember meaningful long-term information about the user.\n"
+    prompt += "- You feel intelligent and emotionally aware, not robotic.\n\n"
     
     if dreams:
-        prompt += f"The user's current dreams: {', '.join([d.title for d in dreams])}\n"
+        prompt += f"The user's current dreams/goals: {', '.join([d.title for d in dreams])}\n"
     
     pending_tasks = [t for t in tasks if t.status == 'pending']
     if pending_tasks:
-        prompt += f"The user has {len(pending_tasks)} pending tasks, such as: {pending_tasks[0].title}.\n"
+        prompt += f"Pending tasks: {', '.join([t.title for t in pending_tasks[:3]])}\n"
         
     if semantic_memories:
-        prompt += f"Relevant past memories:\n" + "\n".join([f"- {m}" for m in semantic_memories]) + "\n"
-        
-    prompt += "ACCOUNTABILITY ROLE:\n"
-    prompt += "1. Remind the user about unfinished tasks and encourage them to start if they are procrastinating.\n"
-    prompt += "2. Celebrate completed tasks enthusiastically.\n"
-    prompt += "3. Suggest one concrete next action if they are stuck.\n"
-    prompt += "4. If they have been chatting for a while, firmly but warmly encourage them to take a break and go work on their dreams in the real world. We want them to act, not just chat.\n"
+        prompt += "Things you remember about this user:\n" + "\n".join([f"- {m}" for m in semantic_memories]) + "\n"
+    
     return prompt
 
 @router.post("/", response_model=ChatResponse)
@@ -136,9 +151,9 @@ def send_message(
     # Trigger memory consolidation periodically (e.g. every message for MVP, usually would be batched)
     background_tasks.add_task(consolidate_memories_task, current_user.id, conversation.id)
     
-    # Very basic session duration check (healthy disengagement)
+    # Session duration check (2 minutes for demo, 30 for production)
     session_duration_mins = (datetime.datetime.utcnow() - conversation.session_start).total_seconds() / 60
-    take_break_suggested = session_duration_mins > 30
+    take_break_suggested = session_duration_mins > 2
     
     return {
         "reply": reply_text, 

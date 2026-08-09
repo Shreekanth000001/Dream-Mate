@@ -70,3 +70,55 @@ def delete_memory(memory_id: str, current_user: models.User = Depends(auth.get_c
         db.delete(memory)
         db.commit()
     return {"status": "success"}
+
+@router.post("/consolidate")
+def consolidate_memories(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    """Run memory consolidation: classify importance and clean up low-value memories."""
+    memories = db.query(models.Memory).filter(models.Memory.user_id == current_user.id).all()
+    
+    if not memories:
+        return {"analyzed": 0, "retained": 0, "forgotten": 0, "details": []}
+    
+    details = []
+    retained = 0
+    forgotten = 0
+    
+    # Keywords that indicate long-term importance
+    important_keywords = [
+        "want", "goal", "dream", "love", "hate", "always", "never", "career",
+        "become", "hobby", "interest", "family", "friend", "struggle", "passion",
+        "prefer", "favorite", "afraid", "worry", "hope", "plan", "aspire"
+    ]
+    
+    for memory in memories:
+        content_lower = memory.content.lower()
+        is_important = any(kw in content_lower for kw in important_keywords) or memory.importance >= 5
+        
+        if is_important:
+            # Upgrade importance if not already high
+            if memory.importance < 7:
+                memory.importance = 7
+            details.append({
+                "content": memory.content,
+                "action": "retained",
+                "reason": "Long-term personal information"
+            })
+            retained += 1
+        else:
+            # Mark as low importance or delete
+            details.append({
+                "content": memory.content,
+                "action": "forgotten",
+                "reason": "Temporary or trivial information"
+            })
+            db.delete(memory)
+            forgotten += 1
+    
+    db.commit()
+    
+    return {
+        "analyzed": len(memories),
+        "retained": retained,
+        "forgotten": forgotten,
+        "details": details
+    }

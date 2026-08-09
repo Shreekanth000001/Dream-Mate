@@ -6,8 +6,10 @@ from apps.api.config import settings
 # Fallback to SQLite for MVP since Docker/Postgres is unavailable in this environment
 DATABASE_URL = settings.DATABASE_URL
 
+connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+
 engine = create_engine(
-    DATABASE_URL, connect_args={"check_same_thread": False}
+    DATABASE_URL, connect_args=connect_args
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

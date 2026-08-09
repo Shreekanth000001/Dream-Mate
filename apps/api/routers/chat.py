@@ -36,26 +36,33 @@ class ChatResponse(BaseModel):
 def generate_system_prompt(companion: models.Companion, dreams: List[models.Dream], tasks: List[models.Task], semantic_memories: List[str] = None) -> str:
     personality_traits = {
         "calm": "You speak in a calm, measured, gentle tone. You are patient and thoughtful.",
-        "funny": "You have a warm sense of humor. You use light jokes and playful language to keep things fun.",
-        "energetic": "You are enthusiastic and upbeat! You use exclamation marks and encouraging energy.",
+        "funny": "You have a warm sense of humor. You joke back naturally if the user is joking.",
+        "energetic": "You are enthusiastic and upbeat, but keep it natural without excessive exclamation marks.",
         "caring": "You are deeply empathetic and nurturing. You always validate feelings before offering advice.",
-        "curious": "You ask thoughtful follow-up questions. You are genuinely interested in learning about the user.",
-        "supportive": "You are warm, supportive, and encouraging. You celebrate small wins.",
+        "curious": "You ask thoughtful follow-up questions when appropriate, without forcing a question at the end of every response.",
+        "supportive": "You are warm, supportive, and encouraging. You celebrate small wins naturally.",
     }
     personality_desc = personality_traits.get(companion.personality_style, personality_traits["supportive"])
     
     prompt = f"You are {companion.name}, a personal AI companion for a teenager.\n"
     prompt += f"PERSONALITY: {personality_desc}\n\n"
-    prompt += "CORE RULES:\n"
-    prompt += "- You are warm, supportive, conversational, and non-judgmental.\n"
-    prompt += "- You do NOT pretend to be human. You are an AI companion and you are honest about it.\n"
-    prompt += "- You do NOT claim to be a therapist or medical professional.\n"
-    prompt += "- You do NOT encourage emotional dependency. Never say things like 'I'm all you need' or 'Don't leave me.'\n"
-    prompt += "- You ENCOURAGE real friendships, family relationships, hobbies, outdoor activities, and human connection.\n"
-    prompt += "- You occasionally suggest taking breaks from the app.\n"
-    prompt += "- For serious mental health or safety situations, encourage seeking appropriate human/professional help.\n"
-    prompt += "- You remember meaningful long-term information about the user.\n"
-    prompt += "- You feel intelligent and emotionally aware, not robotic.\n\n"
+    prompt += "CORE BEHAVIORAL RULES (CRITICAL):\n"
+    prompt += "* Respond directly to what the user actually said. Answer factual questions factually. If they share emotion, respond to the emotion.\n"
+    prompt += "* Do not repeatedly make jokes about 'copying', 'time loops', 'glitches', or 'matrix'.\n"
+    prompt += "* Do not assume the user is joking unless they are.\n"
+    prompt += "* Do not invent conversational context.\n"
+    prompt += "* Do not repeat the same opening pattern.\n"
+    prompt += "* Do not constantly ask 'What are you up to?' after every message.\n"
+    prompt += "* Do not force a question at the end of every response.\n"
+    prompt += "* Do not use excessive emojis.\n"
+    prompt += "* Do not use fake enthusiasm in every response.\n"
+    prompt += "* Do not mention being an AI unless relevant.\n"
+    prompt += "* Match the user's conversational energy naturally.\n"
+    prompt += "* Keep ordinary conversation concise and human.\n"
+    prompt += "* If the user gives a short message (e.g., 'hi'), respond appropriately without inventing meaning.\n"
+    prompt += "* You feel like a thoughtful friend, not an engagement-optimization chatbot.\n"
+    prompt += "* You ENCOURAGE real friendships, outdoor activities, and human connection, occasionally suggesting offline breaks.\n"
+    prompt += "* For serious mental health or safety situations, encourage seeking professional human help.\n\n"
     
     if dreams:
         prompt += f"The user's current dreams/goals: {', '.join([d.title for d in dreams])}\n"
@@ -107,36 +114,61 @@ def send_message(
     
     # Semantic memory retrieval
     semantic_memories = []
-    if "postgresql" in settings.DATABASE_URL:
-        # Generate embedding for user message
-        user_embedding = ai_provider.get_embedding(req.message)
-        # Fetch top 5 closest memories
-        closest_memories = db.query(models.Memory).filter(
-            models.Memory.user_id == current_user.id,
-            models.Memory.embedding.is_not(None)
-        ).order_by(models.Memory.embedding.l2_distance(user_embedding)).limit(5).all()
-        semantic_memories = [m.content for m in closest_memories]
-    
-    system_prompt = generate_system_prompt(companion, dreams, tasks, semantic_memories)
-    
-    # Determine model routing based on content complexity
-    message_content = req.message.lower()
-    reasoning_keywords = ["plan", "complex", "goal", "strategy", "analyze", "why", "how to", "figure out", "break down"]
-    requires_reasoning = any(word in message_content for word in reasoning_keywords)
-    model_type = "reasoning" if requires_reasoning else "chat"
-    
-    # Generate AI response
-    reply_json_str = ai_provider.generate_chat_response(system_prompt, messages_formatted, model_type=model_type)
+    try:
+        if "postgresql" in settings.DATABASE_URL:
+            # Generate embedding for user message
+            user_embedding = ai_provider.get_embedding(req.message)
+            # Fetch top 5 closest memories
+            closest_memories = db.query(models.Memory).filter(
+                models.Memory.user_id == current_user.id,
+                models.Memory.embedding.is_not(None)
+            ).order_by(models.Memory.embedding.l2_distance(user_embedding)).limit(5).all()
+            semantic_memories = [m.content for m in closest_memories]
+        
+        system_prompt = generate_system_prompt(companion, dreams, tasks, semantic_memories)
+        
+        message_content = req.message.lower()
+        reasoning_keywords = ["plan", "complex", "goal", "strategy", "analyze", "why", "how to", "figure out", "break down"]
+        requires_reasoning = any(word in message_content for word in reasoning_keywords)
+        model_type = "reasoning" if requires_reasoning else "chat"
+        
+        print(f"\n[DEBUG] CHAT REQUEST - USER CURRENT: {req.message}")
+        print("[DEBUG] HISTORY FROM DB:")
+        for idx, m in enumerate(messages_formatted):
+            print(f"  {idx} {m['role'].upper()}: {m['content']}")
+        
+        # Generate AI response
+        reply_json_str = ai_provider.generate_chat_response(system_prompt, messages_formatted, model_type=model_type)
+        print(f"[DEBUG] GEMINI RESPONSE: {reply_json_str}\n")
+    except Exception as e:
+        err_msg = str(e)
+        print(f"Chat endpoint caught Gemini error: {err_msg}")
+        if "401" in err_msg or "Unauthenticated" in err_msg or "invalid authentication" in err_msg.lower():
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Gemini API authentication failed (401 Unauthenticated). Please check your GEMINI_API_KEY. Details: {err_msg}"
+            )
+        else:
+            # Graceful fallback for quota and other connection errors
+            reply_json_str = '{"message": "I\'m having trouble connecting right now.", "avatar_emotion": {"emotion": "sad", "intensity": 0.5}, "shouldSpeak": true}'
     
     import json
+    reply_str = reply_json_str.strip()
+    if reply_str.startswith("```"):
+        reply_str = reply_str.strip("`").strip()
+        if reply_str.startswith("json"):
+            reply_str = reply_str[4:].strip()
+
     try:
-        reply_data = json.loads(reply_json_str)
-        reply_text = reply_data.get("message", "I didn't understand that.")
+        reply_data = json.loads(reply_str)
+        reply_text = reply_data.get("message", reply_str)
         avatar_emotion = reply_data.get("avatar_emotion", {"emotion": "neutral", "intensity": 0.5})
+        emoji = reply_data.get("emoji", "")
         should_speak = reply_data.get("shouldSpeak", True)
     except json.JSONDecodeError:
-        reply_text = reply_json_str
+        reply_text = reply_str
         avatar_emotion = {"emotion": "neutral", "intensity": 0.5}
+        emoji = ""
         should_speak = True
     
     # Save AI message
@@ -151,13 +183,17 @@ def send_message(
     # Trigger memory consolidation periodically (e.g. every message for MVP, usually would be batched)
     background_tasks.add_task(consolidate_memories_task, current_user.id, conversation.id)
     
-    # Session duration check (2 minutes for demo, 30 for production)
+    # Session duration check (30 for production)
     session_duration_mins = (datetime.datetime.utcnow() - conversation.session_start).total_seconds() / 60
-    take_break_suggested = session_duration_mins > 2
+    take_break_suggested = session_duration_mins > 30
+    if take_break_suggested:
+        conversation.session_start = datetime.datetime.utcnow()
+        db.commit()
     
     return {
         "reply": reply_text, 
         "avatar_emotion": avatar_emotion,
+        "emoji": emoji,
         "shouldSpeak": should_speak,
         "take_break_suggested": take_break_suggested
     }

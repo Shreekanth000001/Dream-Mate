@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from contextlib import asynccontextmanager
 
+from apps.api.config import settings
 from apps.api.database import get_db, engine, Base
 from apps.api import models, schemas
 
@@ -10,6 +11,14 @@ from apps.api import models, schemas
 # However, for pgvector we need to ensure the extension exists first.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if "postgresql" in settings.DATABASE_URL:
+        try:
+            from sqlalchemy import text
+            with engine.connect() as conn:
+                conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+                conn.commit()
+        except Exception as e:
+            print(f"pgvector extension init warning: {e}")
     Base.metadata.create_all(bind=engine)
     yield
 

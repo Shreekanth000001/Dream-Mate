@@ -5,10 +5,11 @@ BASE_DIR = Path(__file__).resolve().parent
 
 class Settings(BaseSettings):
     GEMINI_API_KEY: str | None = None
-    GEMINI_CHAT_MODEL: str = "gemini-3.6-flash"
-    GEMINI_REASONING_MODEL: str = "gemini-3.1-pro"
+    GEMINI_MODEL: str = "gemini-3.5-flash-lite"
+    GEMINI_CHAT_MODEL: str | None = None
+    GEMINI_REASONING_MODEL: str | None = None
     GEMINI_BACKGROUND_MODEL: str = "gemini-3.5-flash-lite"
-    GEMINI_EMBEDDING_MODEL: str = "models/text-embedding-004"
+    GEMINI_EMBEDDING_MODEL: str = "models/gemini-embedding-001"
     ELEVENLABS_API_KEY: str | None = None
     ELEVENLABS_VOICE_ID: str = "EXAVITQu4vr4xnSDxMaL"
     AI_PROVIDER: str = "gemini"

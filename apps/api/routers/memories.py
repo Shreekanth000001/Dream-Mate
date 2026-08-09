@@ -59,6 +59,30 @@ def get_memories(current_user: models.User = Depends(auth.get_current_user), db:
     # Format for UI
     return [{"id": m.id, "content": m.content, "type": m.memory_type, "importance": m.importance} for m in memories]
 
+class AddMemoryRequest(BaseModel if 'BaseModel' in globals() else object):
+    pass
+
+from pydantic import BaseModel
+class CreateMemoryRequest(BaseModel):
+    content: str
+    importance: int = 5
+    memory_type: str = "recent"
+
+@router.post("/", response_model=Dict[str, Any])
+def add_memory(req: CreateMemoryRequest, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    embedding = ai_provider.get_embedding(req.content)
+    memory = models.Memory(
+        user_id=current_user.id,
+        content=req.content,
+        memory_type=req.memory_type,
+        importance=req.importance,
+        embedding=embedding
+    )
+    db.add(memory)
+    db.commit()
+    db.refresh(memory)
+    return {"id": memory.id, "content": memory.content, "type": memory.memory_type, "importance": memory.importance}
+
 @router.delete("/{memory_id}")
 def delete_memory(memory_id: str, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
     memory = db.query(models.Memory).filter(

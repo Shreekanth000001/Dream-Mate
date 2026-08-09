@@ -77,6 +77,10 @@ export const api = {
   
   // Memories
   getMemories: (): Promise<MemoryItem[]> => fetchAPI('/memories/'),
+  addMemory: (content: string, importance: number = 5): Promise<MemoryItem> => fetchAPI('/memories/', {
+    method: 'POST',
+    body: JSON.stringify({ content, importance }),
+  }),
   deleteMemory: (id: string) => fetchAPI(`/memories/${id}`, { method: 'DELETE' }),
   consolidateMemories: (): Promise<ConsolidationResult> => fetchAPI('/memories/consolidate', { method: 'POST' }),
   

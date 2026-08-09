@@ -49,9 +49,11 @@ export interface ConsolidationResult {
 
 export interface ChatResponse {
   reply: string;
-  avatar_emotion: { emotion: string; intensity: number };
-  shouldSpeak: boolean;
-  take_break_suggested: boolean;
+  avatar_emotion?: { emotion: string; intensity: number };
+  avatar_gesture?: { gesture: string; intensity?: number };
+  emoji?: string;
+  shouldSpeak?: boolean;
+  take_break_suggested?: boolean;
 }
 
 export const api = {

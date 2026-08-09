@@ -216,6 +216,7 @@ export default function HomePage() {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       
+      const appearanceObj = (companion?.appearance || {}) as Record<string, unknown>;
       const voiceURI = appearanceObj.voiceURI as string;
       if (voiceURI) {
         const voices = window.speechSynthesis.getVoices();

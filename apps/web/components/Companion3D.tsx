@@ -149,7 +149,7 @@ function AvatarRenderer({
         vrm.expressionManager!.setValue(name, 0);
       });
       
-      let expr = VRMExpressionPresetName.Neutral;
+      let expr: VRMExpressionPresetName = VRMExpressionPresetName.Neutral;
       if (emotion === 'happy' || emotion === 'excited') expr = VRMExpressionPresetName.Happy;
       else if (emotion === 'sad') expr = VRMExpressionPresetName.Sad;
       else if (emotion === 'angry' || emotion === 'concerned') expr = VRMExpressionPresetName.Angry;

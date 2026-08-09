@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, ANY
 from apps.api.config import settings
 from packages.ai.gemini import GeminiProvider
 
@@ -32,8 +32,8 @@ def test_normal_chat_uses_chat_model(mock_genai):
     
     mock_genai.GenerativeModel.assert_called_with(
         "chat-model-v1",
-        system_instruction=mock_genai.ANY,
-        generation_config=mock_genai.ANY
+        system_instruction=ANY,
+        generation_config=ANY
     )
 
 def test_complex_reasoning_uses_reasoning_model(mock_genai):
@@ -44,8 +44,8 @@ def test_complex_reasoning_uses_reasoning_model(mock_genai):
     
     mock_genai.GenerativeModel.assert_called_with(
         "reason-model-v1",
-        system_instruction=mock_genai.ANY,
-        generation_config=mock_genai.ANY
+        system_instruction=ANY,
+        generation_config=ANY
     )
 
 def test_memory_processing_uses_background_model(mock_genai):

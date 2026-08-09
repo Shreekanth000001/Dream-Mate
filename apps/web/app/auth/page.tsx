@@ -35,7 +35,9 @@ export default function AuthPage() {
         headers['Content-Type'] = 'application/json';
       }
 
-      const res = await fetch(`http://localhost:8000${endpoint}`, {
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+      const res = await fetch(`${API_BASE}${endpoint}`, {
         method: 'POST',
         headers,
         body
@@ -58,7 +60,7 @@ export default function AuthPage() {
       
       // Check if companion exists, redirect accordingly
       try {
-        const compRes = await fetch('http://localhost:8000/companion/', {
+        const compRes = await fetch(`${API_BASE}/companion/`, {
           headers: { 'Authorization': `Bearer ${data.access_token}` }
         });
         if (compRes.status === 404) {

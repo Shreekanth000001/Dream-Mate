@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
@@ -34,8 +36,6 @@ export default function AuthPage() {
         body = JSON.stringify({ email, password });
         headers['Content-Type'] = 'application/json';
       }
-
-      const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
       const res = await fetch(`${API_BASE}${endpoint}`, {
         method: 'POST',

@@ -10,8 +10,33 @@ from packages.ai.mock import MockProvider
 from packages.ai.voice import ElevenLabsProvider, MockVoiceProvider
 from apps.api.config import settings
 from apps.api.routers.memories import consolidate_memories_task
+from datetime import datetime
+from typing import Optional
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+VALID_GESTURES = {
+    "idle",
+    "acknowledge",
+    "angry",
+    "angry_gesture",
+    "annoying_head_nod",
+    "arm_stretching",
+    "defeated",
+    "happy_yes",
+    "laughing",
+    "rallying",
+    "relieved_sigh",
+    "sad",
+    "shaking_head_no",
+    "snake_dance",
+    "surprised",
+    "thinking",
+    "warming_up",
+    "wave",
+    "wave_dance",
+    "welcome",
+}
 
 if settings.AI_PROVIDER == "mock":
     ai_provider = MockProvider()
@@ -27,11 +52,54 @@ class AvatarEmotion(BaseModel):
     emotion: str = "neutral"
     intensity: float = 0.5
 
+
+class AvatarGesture(BaseModel):
+    gesture: str = "idle"
+
+
 class ChatResponse(BaseModel):
     reply: str
     avatar_emotion: AvatarEmotion
+    avatar_gesture: Optional[AvatarGesture] = None
+    emoji: str = ""
     shouldSpeak: bool = True
     take_break_suggested: bool = False
+
+def format_time_context(
+    message_time: datetime,
+    now: datetime,
+) -> str:
+    delta_seconds = max(
+        0,
+        int(
+            (now - message_time).total_seconds()
+        )
+    )
+
+    minutes = delta_seconds // 60
+
+    if minutes < 1:
+        return "just now"
+
+    if minutes < 60:
+        return f"{minutes} minute{'s' if minutes != 1 else ''} ago"
+
+    message_date = message_time.date()
+    today = now.date()
+
+    if message_date == today:
+        hours = minutes // 60
+        return f"{hours} hour{'s' if hours != 1 else ''} ago"
+
+    days = (today - message_date).days
+
+    if days == 1:
+        return "yesterday"
+
+    if days < 7:
+        return f"{days} days ago"
+
+    return message_time.strftime("%d %b %Y")
 
 def generate_system_prompt(companion: models.Companion, dreams: List[models.Dream], tasks: List[models.Task], semantic_memories: List[str] = None) -> str:
     personality_traits = {
@@ -103,10 +171,28 @@ def send_message(
     user_msg = models.Message(conversation_id=conversation.id, role="user", content=req.message)
     db.add(user_msg)
     db.commit()
-    
+
+    current_user_message = req.message
+
     # Fetch recent history
-    history = db.query(models.Message).filter(models.Message.conversation_id == conversation.id).order_by(models.Message.created_at.asc()).limit(20).all()
-    messages_formatted = [{"role": m.role, "content": m.content} for m in history]
+    history = (
+    db.query(models.Message)
+    .filter(models.Message.conversation_id == conversation.id)
+    .order_by(models.Message.created_at.desc())
+    .limit(20)
+    .all())
+    history.reverse()
+
+    now = datetime.utcnow()
+
+    messages_formatted = [
+    {
+        "role": m.role,
+        "content": m.content,
+        "time_context": format_time_context(m.created_at, datetime.utcnow()),
+    }
+    for m in history
+]
     
     # Context gathering
     dreams = db.query(models.Dream).filter(models.Dream.user_id == current_user.id).all()
@@ -119,10 +205,18 @@ def send_message(
             # Generate embedding for user message
             user_embedding = ai_provider.get_embedding(req.message)
             # Fetch top 5 closest memories
-            closest_memories = db.query(models.Memory).filter(
-                models.Memory.user_id == current_user.id,
-                models.Memory.embedding.is_not(None)
-            ).order_by(models.Memory.embedding.l2_distance(user_embedding)).limit(5).all()
+            closest_memories = (
+                db.query(models.Memory)
+                .filter(
+            models.Memory.user_id == current_user.id,
+            models.Memory.embedding.is_not(None),
+            models.Memory.importance >= 3,
+            (models.Memory.expiration_at.is_(None) | (models.Memory.expiration_at > datetime.utcnow()))
+            )
+            .order_by(models.Memory.embedding.l2_distance(user_embedding))
+            .limit(5)
+            .all()
+)
             semantic_memories = [m.content for m in closest_memories]
         
         system_prompt = generate_system_prompt(companion, dreams, tasks, semantic_memories)
@@ -138,7 +232,13 @@ def send_message(
             print(f"  {idx} {m['role'].upper()}: {m['content']}")
         
         # Generate AI response
-        reply_json_str = ai_provider.generate_chat_response(system_prompt, messages_formatted, model_type=model_type)
+        reply_json_str = ai_provider.generate_chat_response(
+        system_prompt,
+        messages_formatted,
+        current_user_message=current_user_message,
+        current_user_time="just now",
+        model_type=model_type,
+        )
         print(f"[DEBUG] GEMINI RESPONSE: {reply_json_str}\n")
     except Exception as e:
         err_msg = str(e)
@@ -153,7 +253,14 @@ def send_message(
             reply_json_str = '{"message": "I\'m having trouble connecting right now.", "avatar_emotion": {"emotion": "sad", "intensity": 0.5}, "shouldSpeak": true}'
     
     import json
+    reply_text = ""
+    avatar_emotion = {"emotion": "neutral", "intensity": 0.5}
+    avatar_gesture = None
+    emoji = ""
+    should_speak = True
+
     reply_str = reply_json_str.strip()
+
     if reply_str.startswith("```"):
         reply_str = reply_str.strip("`").strip()
         if reply_str.startswith("json"):
@@ -161,38 +268,46 @@ def send_message(
 
     try:
         reply_data = json.loads(reply_str)
+
         reply_text = reply_data.get("message", reply_str)
         avatar_emotion = reply_data.get("avatar_emotion", {"emotion": "neutral", "intensity": 0.5})
+        
+        # OPTIONAL
+        avatar_gesture = reply_data.get("avatar_gesture")
         emoji = reply_data.get("emoji", "")
         should_speak = reply_data.get("shouldSpeak", True)
+
+        if avatar_gesture:
+            gesture_name = avatar_gesture.get("gesture")
+
+            if gesture_name not in VALID_GESTURES:
+                print(f"[DEBUG] Invalid animation ID from Gemini: {gesture_name}")
+                avatar_gesture = None
+
     except json.JSONDecodeError:
         reply_text = reply_str
-        avatar_emotion = {"emotion": "neutral", "intensity": 0.5}
-        emoji = ""
-        should_speak = True
     
     # Save AI message
     ai_msg = models.Message(conversation_id=conversation.id, role="assistant", content=reply_text)
     db.add(ai_msg)
     
-    # Update last interaction
-    import datetime
-    conversation.last_interaction_at = datetime.datetime.utcnow()
+    conversation.last_interaction_at = datetime.utcnow()
     db.commit()
     
     # Trigger memory consolidation periodically (e.g. every message for MVP, usually would be batched)
     background_tasks.add_task(consolidate_memories_task, current_user.id, conversation.id)
     
     # Session duration check (30 for production)
-    session_duration_mins = (datetime.datetime.utcnow() - conversation.session_start).total_seconds() / 60
+    session_duration_mins = (datetime.utcnow() - conversation.session_start).total_seconds() / 60
     take_break_suggested = session_duration_mins > 30
     if take_break_suggested:
-        conversation.session_start = datetime.datetime.utcnow()
+        conversation.session_start = datetime.utcnow()
         db.commit()
     
     return {
         "reply": reply_text, 
         "avatar_emotion": avatar_emotion,
+        "avatar_gesture": avatar_gesture,
         "emoji": emoji,
         "shouldSpeak": should_speak,
         "take_break_suggested": take_break_suggested

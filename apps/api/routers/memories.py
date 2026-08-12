@@ -6,6 +6,7 @@ from apps.api.database import get_db, SessionLocal
 from packages.ai.gemini import GeminiProvider
 from packages.ai.mock import MockProvider
 from apps.api.config import settings
+from datetime import datetime, timedelta, timezone
 
 router = APIRouter(prefix="/memories", tags=["memories"])
 
@@ -29,25 +30,44 @@ def consolidate_memories_task(user_id: str, conversation_id: str):
         recent_messages.reverse()
         text_log = "\n".join([f"{m.role}: {m.content}" for m in recent_messages])
         
-        extracted_facts = ai_provider.extract_memories(text_log)
-        
-        for fact in extracted_facts:
-            # Basic deduplication / importance scoring (simulated for MVP)
+        extracted_memories = ai_provider.extract_memories(text_log)
+
+        for item in extracted_memories:
+            fact = item["content"]
+            memory_type = item["type"]
+            importance = item["importance"]
+            expires_in_days = item["expires_in_days"]
+
+            # Check if this exact memory already exists for the user
             existing = db.query(models.Memory).filter(
-                models.Memory.user_id == user_id, 
+                models.Memory.user_id == user_id,
                 models.Memory.content == fact
             ).first()
-            
-            if not existing:
-                embedding = ai_provider.get_embedding(fact)
-                memory = models.Memory(
-                    user_id=user_id,
-                    content=fact,
-                    memory_type="recent",
-                    importance=5,
-                    embedding=embedding
-                )
-                db.add(memory)
+
+            if existing:
+                continue
+
+            # Calculate expiration date if provided
+            expiration_at = None
+            if expires_in_days is not None:
+                try:
+                    expiration_at = datetime.utcnow() + timedelta(days=float(expires_in_days))
+                except (TypeError, ValueError):
+                    expiration_at = None
+
+            # Generate embedding for the new memory
+            embedding = ai_provider.get_embedding(fact)
+
+            # Create and stage the new memory record
+            memory = models.Memory(
+                user_id=user_id,
+                content=fact,
+                memory_type=memory_type,
+                importance=importance,
+                expiration_at=expiration_at,
+                embedding=embedding,
+            )
+            db.add(memory)
                 
         db.commit()
     finally:

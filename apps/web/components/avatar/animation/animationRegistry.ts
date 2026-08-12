@@ -33,7 +33,7 @@ export const ANIMATIONS: Record<string, AnimationDefinition> = {
   },
 
   "angry_gesture": {
-    file: "/characters/animations/angry gesture.vrma",
+    file: "/characters/animations/angry_gesture.vrma",
     category: "emotion",
     avatars: ["boy", "girl"],
   },
@@ -51,10 +51,9 @@ export const ANIMATIONS: Record<string, AnimationDefinition> = {
   },
 
   "arm_stretching": {
-    file: "/characters/animations/arm stretching.vrma",
+    file: "/characters/animations/arm_stretching.vrma",
     category: "exercise",
-    avatars: ["girl"],
-    preferredAvatar: "girl",
+    avatars: ["boy", "girl"],
   },
 
   defeated: {
@@ -64,7 +63,7 @@ export const ANIMATIONS: Record<string, AnimationDefinition> = {
   },
 
   happy_yes: {
-    file: "/characters/animations/happy yes.vrma",
+    file: "/characters/animations/happy_yes.vrma",
     category: "conversation",
     avatars: ["boy", "girl"],
   },
@@ -82,22 +81,21 @@ export const ANIMATIONS: Record<string, AnimationDefinition> = {
   },
 
   "relieved_sigh": {
-    file: "/characters/animations/relieved sigh.vrma",
+    file: "/characters/animations/relieved_sigh.vrma",
     category: "emotion",
     avatars: ["boy", "girl"],
   },
 
   "shaking_head_no": {
-    file: "/characters/animations/shaking head no.vrma",
+    file: "/characters/animations/shaking_head_no.vrma",
     category: "conversation",
     avatars: ["boy", "girl"],
   },
 
   snake_dance: {
-    file: "/characters/animations/snake dance.vrma",
+    file: "/characters/animations/snake_dance.vrma",
     category: "dance",
-    avatars: ["girl"],
-    preferredAvatar: "girl",
+    avatars: ["boy", "girl"],
   },
 
   surprised: {
@@ -113,14 +111,14 @@ export const ANIMATIONS: Record<string, AnimationDefinition> = {
   },
 
   warming_up: {
-    file: "/characters/animations/warmingup.vrma",
+    file: "/characters/animations/warming_up.vrma",
     category: "exercise",
     avatars: ["boy", "girl"],
     preferredAvatar: "boy",
   },
 
   wave_dance: {
-    file: "/characters/animations/wave dance.vrma",
+    file: "/characters/animations/wave_dance.vrma",
     category: "dance",
     avatars: ["boy", "girl"],
   },

@@ -268,7 +268,7 @@ export default function HomePage() {
       }
       
       if (response.avatar_gesture) {
-        setGesture(response.avatar_gesture.gesture || "none");
+        setGesture(response.avatar_gesture.gesture);
       }
 
       if (response.emoji) {

@@ -225,6 +225,8 @@ export class AnimationController {
      * Gesture plays once.
      */
 
+    gesture.enabled = true;
+
     gesture.reset();
 
     gesture.setLoop(
@@ -243,48 +245,43 @@ export class AnimationController {
      * to finish.
      */
 
-    const handleFinished =
-      (
-        event: THREE.Event
-      ) => {
-        if (
-          event.type !==
-          "finished"
-        ) {
-          return;
-        }
+    const handleFinished = (event: THREE.Event) => {
+    if (event.type !== "finished") {
+        return;
+    }
 
-        const finishedEvent =
-          event as THREE.Event & {
+    const finishedEvent =
+        event as THREE.Event & {
             action?: THREE.AnimationAction;
-          };
+        };
 
-        if (
-          finishedEvent.action !==
-          gesture
-        ) {
-          return;
-        }
+    if (finishedEvent.action !== gesture) {
+        return;
+    }
 
-        this.mixer.removeEventListener(
-          "finished",
-          handleFinished
-        );
+    this.mixer.removeEventListener(
+        "finished",
+        handleFinished
+    );
 
-        if (
-          this.currentGesture ===
-          animationId
-        ) {
-          this.currentGesture =
-            null;
-        }
+    /*
+     * IMPORTANT:
+     * Remove the finished gesture completely.
+     * Do not leave it clamped at its last pose.
+     */
+    gesture.stop();
+    gesture.reset();
+    gesture.enabled = false;
 
-        /*
-         * Return to idle.
-         */
+    if (this.currentGesture === animationId) {
+        this.currentGesture = null;
+    }
 
-        this.returnToIdle();
-      };
+    /*
+     * Restore the idle animation from the beginning.
+     */
+    this.returnToIdle();
+};
 
     this.mixer.addEventListener(
       "finished",
@@ -294,37 +291,43 @@ export class AnimationController {
 
   private returnToIdle(): void {
     if (!this.idleAction) {
-      return;
+        return;
     }
 
-    if (
-      !this.idleAction.isRunning()
-    ) {
-      this.idleAction.reset();
+    /*
+     * Make absolutely sure every gesture has released
+     * control before idle takes over.
+     */
+    for (const [
+        id,
+        action,
+    ] of this.actions) {
+        if (
+            id !== "idle" &&
+            action !== this.idleAction
+        ) {
+            action.stop();
+            action.reset();
+            action.enabled = false;
+        }
+    }
 
-      this.idleAction.setLoop(
+    const idle = this.idleAction;
+
+    idle.enabled = true;
+    idle.stop();
+    idle.reset();
+
+    idle.setLoop(
         THREE.LoopRepeat,
         Infinity
-      );
+    );
 
-      this.idleAction.clampWhenFinished =
-        false;
+    idle.clampWhenFinished = false;
 
-      this.idleAction.fadeIn(
-        0.25
-      );
-
-      this.idleAction.play();
-    } else {
-      this.idleAction.reset();
-
-      this.idleAction.fadeIn(
-        0.25
-      );
-
-      this.idleAction.play();
-    }
-  }
+    idle.fadeIn(0.2);
+    idle.play();
+}
 
   async play(
     animationId: string,
@@ -345,17 +348,20 @@ export class AnimationController {
     );
   }
 
-  stopAll(): void {
+ stopAll(): void {
     ++this.generation;
+
+    for (const action of this.actions.values()) {
+        action.stop();
+        action.reset();
+        action.enabled = false;
+    }
 
     this.mixer.stopAllAction();
 
-    this.currentGesture =
-      null;
-
-    this.idleAction =
-      null;
-  }
+    this.currentGesture = null;
+    this.idleAction = null;
+}
 
   update(
     delta: number

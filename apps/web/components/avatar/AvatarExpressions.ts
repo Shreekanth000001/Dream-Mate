@@ -27,42 +27,42 @@ export function updateAvatarExpressions(
   /*
    * Emotion.
    */
-  let expression =
-    VRMExpressionPresetName.Neutral;
+  let expression: VRMExpressionPresetName =
+  VRMExpressionPresetName.Neutral;
 
-  switch (emotion) {
-    case "happy":
-    case "excited":
-      expression =
-        VRMExpressionPresetName.Happy;
-      break;
+switch (emotion) {
+  case "happy":
+  case "excited":
+    expression =
+      VRMExpressionPresetName.Happy;
+    break;
 
-    case "sad":
-      expression =
-        VRMExpressionPresetName.Sad;
-      break;
+  case "sad":
+    expression =
+      VRMExpressionPresetName.Sad;
+    break;
 
-    case "angry":
-    case "concerned":
-      expression =
-        VRMExpressionPresetName.Angry;
-      break;
+  case "angry":
+  case "concerned":
+    expression =
+      VRMExpressionPresetName.Angry;
+    break;
 
-    case "relaxed":
-      expression =
-        VRMExpressionPresetName.Relaxed;
-      break;
+  case "relaxed":
+    expression =
+      VRMExpressionPresetName.Relaxed;
+    break;
 
-    case "surprised":
-      expression =
-        VRMExpressionPresetName.Surprised;
-      break;
+  case "surprised":
+    expression =
+      VRMExpressionPresetName.Surprised;
+    break;
 
-    default:
-      expression =
-        VRMExpressionPresetName.Neutral;
-      break;
-  }
+  default:
+    expression =
+      VRMExpressionPresetName.Neutral;
+    break;
+}
 
   manager.setValue(
     expression,

@@ -71,7 +71,7 @@ const CompanionStage = React.memo(function CompanionStage({
           transform,
         }} 
         isSpeaking={isSpeaking} 
-        gesture="wave"
+        gesture={gesture}
       />
       <ContactShadows position={[0, -0.8, 0]} opacity={0.4} scale={10} blur={2} far={4} color="#000000" />
     </Canvas>

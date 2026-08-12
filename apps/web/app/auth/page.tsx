@@ -95,7 +95,7 @@ export default function AuthPage() {
             3D AI Companion Demo
           </div>
           <h1 className="text-4xl font-extrabold mb-2 tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-300 to-pink-400">
-            DREAMMATE
+            DREAM MATE
           </h1>
           <p className="text-zinc-400 text-xs md:text-sm leading-relaxed max-w-xs mx-auto">
             A supportive AI companion designed to encourage your real-world goals and healthy digital habits.

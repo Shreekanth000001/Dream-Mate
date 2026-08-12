@@ -82,7 +82,7 @@ export default function CustomizePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [hasExisting, setHasExisting] = useState(false);
 
-  const [name, setName] = useState('DreamMate');
+  const [name, setName] = useState('Dream Mate');
   const [baseAvatar, setBaseAvatar] = useState(CHARACTER_REGISTRY[0].id);
   const [availableCharacters, setAvailableCharacters] = useState<CharacterDef[]>([]);
   const [isDevMode, setIsDevMode] = useState(false);

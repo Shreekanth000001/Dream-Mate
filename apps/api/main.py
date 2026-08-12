@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
 
 from apps.api.routers import auth as auth_router, companion, dreams, tasks, chat, memories
 
-app = FastAPI(title="DREAMMATE API", lifespan=lifespan)
+app = FastAPI(title="DREAM MATE API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

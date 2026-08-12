@@ -4,8 +4,11 @@ import "./globals.css";
 
 
 export const metadata: Metadata = {
-  title: "DREAMMATE — Your AI Companion",
+  title: "DREAM MATE — Your AI Companion",
   description: "An AI companion that cares about you without trying to keep you addicted to it.",
+  icons: {
+    icon: "/dreamLogo.png",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

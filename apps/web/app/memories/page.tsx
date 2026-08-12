@@ -157,7 +157,7 @@ export default function MemoriesPage() {
             Companion Memory 🧠
           </h1>
           <p className="text-zinc-400 text-sm">
-            Dreammate retains meaningful long-term personal facts and lets transient noise fade away.
+            Dream mate retains meaningful long-term personal facts and lets transient noise fade away.
           </p>
         </header>
 
